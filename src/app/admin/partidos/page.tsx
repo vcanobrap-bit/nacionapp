@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { deleteMatchAction } from "./actions";
+import DeleteMatchButton from "./_components/DeleteMatchButton";
 
 export const metadata = { title: "Partidos · Admin · NacionApp" };
 
@@ -98,24 +98,7 @@ export default async function PartidosPage() {
                     >
                       Editar
                     </Link>
-                    <form
-                      action={async () => {
-                        "use server";
-                        await deleteMatchAction(match.id);
-                      }}
-                    >
-                      <button
-                        type="submit"
-                        className="text-xs text-red-400 border border-red-500/20 hover:bg-red-500/10 rounded-lg px-3 py-1.5 transition-colors"
-                        onClick={(e) => {
-                          if (!confirm(`¿Eliminar partido vs ${match.opponent}?`)) {
-                            e.preventDefault();
-                          }
-                        }}
-                      >
-                        Eliminar
-                      </button>
-                    </form>
+                    <DeleteMatchButton matchId={match.id} opponent={match.opponent} />
                   </div>
                 </div>
               </div>

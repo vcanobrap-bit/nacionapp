@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
 import type { MatchData, PlayerData, StatsData, OncePlayer } from "../page";
 
 // ── Types ─────────────────────────────────────────────────────
@@ -72,9 +74,13 @@ export default function AppShell({
       <header className="bg-gradient-to-br from-sky-600 via-sky-500 to-sky-400 text-white shadow-lg shadow-sky-500/20">
         <div className="max-w-xl mx-auto px-4 pt-8 pb-5">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur border border-white/30 flex items-center justify-center text-2xl shadow-inner">
-              🇦🇷
-            </div>
+            <Image
+              src="/img/logo.svg"
+              alt="Selección Argentina Femenina"
+              width={38}
+              height={46}
+              className="shrink-0 drop-shadow-lg"
+            />
             <div>
               <h1 className="text-xl font-black tracking-tight leading-none">
                 NacionApp
@@ -500,7 +506,10 @@ function PlayerCard({ player }: { player: PlayerData }) {
   const bdFormatted = player.birthdate ? formatBirthdate(player.birthdate) : null;
 
   return (
-    <div className="rounded-2xl bg-white border border-slate-100 shadow-sm p-4 flex flex-col items-center text-center">
+    <Link
+      href={`/jugadoras/${player.id}`}
+      className="rounded-2xl bg-white border border-slate-100 shadow-sm p-4 flex flex-col items-center text-center hover:border-sky-200 hover:shadow-sky-100 hover:shadow-md transition-all duration-200 group"
+    >
       {/* Avatar */}
       <div className="w-16 h-16 rounded-full bg-slate-100 border-2 border-slate-200 overflow-hidden flex items-center justify-center mb-3 shrink-0">
         {player.avatarUrl ? (
@@ -555,7 +564,12 @@ function PlayerCard({ player }: { player: PlayerData }) {
           </div>
         )}
       </div>
-    </div>
+
+      {/* Ver perfil hint */}
+      <p className="mt-3 text-xs text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity font-semibold">
+        Ver perfil →
+      </p>
+    </Link>
   );
 }
 
