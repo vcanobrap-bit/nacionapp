@@ -1,0 +1,127 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+//  Enums
+// ─────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  PLAYER
+}
+
+enum MatchStatus {
+  PENDING      // Por jugar
+  IN_PROGRESS  // En curso (partido en vivo)
+  FINISHED     // Finalizado
+}
+
+enum MatchResult {
+  WIN
+  LOSS
+  DRAW
+}
+
+/// Estado físico/disponibilidad de la jugadora (solo visible para admin)
+enum PlayerStatus {
+  AVAILABLE
+  INJURED
+}
+
+// ─────────────────────────────────────────────
+//  Models
+// ─────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  role      Role     @default(PLAYER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Datos personales de la jugadora (relación 1:1)
+  profile   Profile?
+
+  /// Partidos en los que esta jugadora participó
+  playerMatches PlayerMatch[]
+
+  /// Partidos creados/administrados por este usuario
+  createdMatches Match[] @relation("CreatedBy")
+
+  @@map("users")
+}
+
+model Profile {
+  id           String       @id @default(cuid())
+  userId       String       @unique
+
+  // ── Campos públicos ─────────────────────────
+  firstName    String
+  lastName     String
+  avatarUrl    String?      // URL de la foto de perfil
+  birthdate    DateTime?    // Fecha de nacimiento
+  joiningYear  Int?         // Año en que se incorporó a la selección
+  idealPosition String?     // ej. "Delantera", "Mediocampista", "Defensora", "Portera"
+  number       Int?         // Número de camiseta
+  nationality  String?      @default("Argentina")
+  bio          String?      // Descripción pública breve
+
+  // ── Campos privados (solo admin) ────────────
+  status         PlayerStatus @default(AVAILABLE)
+  adminComments  String?      // Notas internas del cuerpo técnico
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model Match {
+  id        String      @id @default(cuid())
+  date      DateTime
+  opponent  String      // Nombre del equipo rival
+  venue     String?     // Estadio / cancha
+  status    MatchStatus @default(PENDING)
+  result    MatchResult?          // null mientras status != FINISHED
+  homeScore Int?                  // Goles propios
+  awayScore Int?                  // Goles del rival
+  notes     String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  createdById String
+  createdBy   User   @relation("CreatedBy", fields: [createdById], references: [id])
+
+  /// Jugadoras convocadas / que participaron en el partido
+  players     PlayerMatch[]
+
+  @@map("matches")
+}
+
+/// Tabla intermedia: convocatoria y titularidad por partido
+model PlayerMatch {
+  id        String  @id @default(cuid())
+  userId    String
+  matchId   String
+
+  /// true = jugadora titular en este partido (se setea cuando pasa a IN_PROGRESS)
+  isTitular Boolean @default(false)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, matchId])
+  @@map("player_matches")
+}
