@@ -5,13 +5,13 @@ import DeleteMatchButton from "./_components/DeleteMatchButton";
 export const metadata = { title: "Partidos · Admin · NacionApp" };
 
 const STATUS_CONFIG = {
-  PENDING:     { label: "Por jugar",  color: "text-slate-300  bg-slate-500/10  border-slate-500/20" },
-  IN_PROGRESS: { label: "En curso",   color: "text-green-300  bg-green-500/10  border-green-500/20" },
-  FINISHED:    { label: "Finalizado", color: "text-slate-400  bg-slate-500/5   border-slate-500/10" },
+  PENDING:     { label: "Por jugar",  color: "text-slate-400  bg-white/5      border-white/10"        },
+  IN_PROGRESS: { label: "En curso",   color: "text-emerald-300 bg-emerald-500/10 border-emerald-500/20" },
+  FINISHED:    { label: "Finalizado", color: "text-blue-300   bg-blue-500/10  border-blue-500/20"     },
 };
 
 const RESULT_LABEL = { WIN: "Victoria", LOSS: "Derrota", DRAW: "Empate" };
-const RESULT_COLOR = { WIN: "text-green-300", LOSS: "text-red-300", DRAW: "text-yellow-300" };
+const RESULT_COLOR = { WIN: "text-emerald-300", LOSS: "text-red-300", DRAW: "text-amber-300" };
 
 export default async function PartidosPage() {
   const matches = await prisma.match.findMany({
@@ -23,12 +23,12 @@ export default async function PartidosPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Partidos</h1>
-          <p className="text-slate-400 text-sm mt-0.5">{matches.length} registrados</p>
+          <h1 className="text-2xl font-semibold text-white tracking-tight">Partidos</h1>
+          <p className="text-slate-500 text-sm mt-0.5">{matches.length} registrados</p>
         </div>
         <Link
           href="/admin/partidos/nuevo"
-          className="inline-flex items-center gap-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-white font-semibold text-sm px-4 py-2 transition-colors"
+          className="inline-flex items-center gap-2 rounded-full bg-white hover:bg-white/90 text-[#050B14] font-semibold text-sm px-4 py-2 transition-colors"
         >
           <span>+</span> Nuevo partido
         </Link>
@@ -45,19 +45,23 @@ export default async function PartidosPage() {
             return (
               <div
                 key={match.id}
-                className={`rounded-xl border ${isLive ? "border-green-500/30 bg-green-500/5" : "border-white/10 bg-white/5"} px-5 py-4`}
+                className={`rounded-2xl border px-5 py-4 transition-all duration-150 ${
+                  isLive
+                    ? "border-emerald-500/20 bg-emerald-500/[0.04]"
+                    : "border-white/10 bg-white/[0.04]"
+                }`}
               >
                 <div className="flex items-start gap-4">
                   {/* Live pulse */}
                   {isLive && (
                     <div className="flex items-center pt-0.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                     </div>
                   )}
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-white">{match.opponent}</span>
+                      <span className="font-semibold text-white text-sm">{match.opponent}</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${st.color}`}>
                         {st.label}
                       </span>
@@ -70,7 +74,7 @@ export default async function PartidosPage() {
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-400 mt-1">
+                    <p className="text-xs text-slate-500 mt-1">
                       {new Date(match.date).toLocaleDateString("es-AR", {
                         weekday: "long",
                         day: "2-digit",
@@ -87,14 +91,14 @@ export default async function PartidosPage() {
                     {match.status === "IN_PROGRESS" && (
                       <Link
                         href={`/admin/partidos/${match.id}/once`}
-                        className="text-xs text-green-300 border border-green-500/30 hover:bg-green-500/10 rounded-lg px-3 py-1.5 transition-colors font-medium"
+                        className="text-xs text-emerald-300 border border-emerald-500/20 hover:bg-emerald-500/10 rounded-full px-3 py-1.5 transition-colors font-medium"
                       >
                         Once inicial
                       </Link>
                     )}
                     <Link
                       href={`/admin/partidos/${match.id}`}
-                      className="text-xs text-slate-300 border border-white/10 hover:bg-white/10 rounded-lg px-3 py-1.5 transition-colors"
+                      className="text-xs text-slate-400 hover:text-white border border-white/10 hover:border-white/20 rounded-full px-3 py-1.5 transition-all"
                     >
                       Editar
                     </Link>

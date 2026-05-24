@@ -16,10 +16,10 @@ export interface ConvocatoriaPlayer {
 const POSITION_ORDER = ["Portera", "Defensora", "Mediocampista", "Delantera"];
 
 const POSITION_COLOR: Record<string, string> = {
-  Portera:       "text-amber-300",
-  Defensora:     "text-sky-300",
-  Mediocampista: "text-emerald-300",
-  Delantera:     "text-rose-300",
+  Portera:       "text-amber-400",
+  Defensora:     "text-blue-400",
+  Mediocampista: "text-emerald-400",
+  Delantera:     "text-rose-400",
 };
 
 export default function ConvocatoriaForm({
@@ -52,7 +52,6 @@ export default function ConvocatoriaForm({
         ? await removePlayerFromMatchAction(matchId, userId)
         : await addPlayerToMatchAction(matchId, userId);
       if (result.error) {
-        // Revert
         setConvocados((prev) => {
           const next = new Set(prev);
           wasConvocado ? next.add(userId) : next.delete(userId);
@@ -61,7 +60,6 @@ export default function ConvocatoriaForm({
         setError(result.error);
       }
     } catch {
-      // Revert
       setConvocados((prev) => {
         const next = new Set(prev);
         wasConvocado ? next.add(userId) : next.delete(userId);
@@ -79,7 +77,6 @@ export default function ConvocatoriaForm({
 
   const convocadoCount = convocados.size;
 
-  // Group by position
   const groups = POSITION_ORDER.map((pos) => ({
     pos,
     players: players.filter((p) => p.idealPosition === pos),
@@ -93,22 +90,20 @@ export default function ConvocatoriaForm({
     <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-400">
-          <span className={`font-bold text-base tabular-nums ${convocadoCount > 0 ? "text-sky-300" : "text-slate-500"}`}>
+        <p className="text-sm text-slate-500">
+          <span className={`font-bold text-base tabular-nums ${convocadoCount > 0 ? "text-blue-400" : "text-slate-600"}`}>
             {convocadoCount}
           </span>{" "}
           {convocadoCount === 1 ? "jugadora convocada" : "jugadoras convocadas"}
         </p>
       </div>
 
-      {/* Error */}
       {error && (
-        <div role="alert" className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
+        <div role="alert" className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
       )}
 
-      {/* No players */}
       {players.length === 0 && (
         <p className="text-sm text-slate-500">No hay jugadoras en el plantel.</p>
       )}
@@ -116,7 +111,7 @@ export default function ConvocatoriaForm({
       {/* Position groups */}
       {groups.map(({ pos, players: group }) => (
         <div key={pos}>
-          <p className={`text-xs uppercase tracking-wider font-semibold mb-2 ${POSITION_COLOR[pos] ?? "text-slate-400"}`}>
+          <p className={`text-xs uppercase tracking-widest font-semibold mb-2 ${POSITION_COLOR[pos] ?? "text-slate-500"}`}>
             {pos}s
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -135,7 +130,7 @@ export default function ConvocatoriaForm({
 
       {sinPosicion.length > 0 && (
         <div>
-          <p className="text-xs uppercase tracking-wider font-semibold mb-2 text-slate-400">
+          <p className="text-xs uppercase tracking-widest font-semibold mb-2 text-slate-500">
             Sin posición
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -171,14 +166,14 @@ function PlayerToggle({
       type="button"
       disabled={isLoading}
       onClick={onToggle}
-      className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-all disabled:opacity-60 ${
+      className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-all duration-150 disabled:opacity-60 ${
         selected
-          ? "border-sky-500/40 bg-sky-500/10 hover:bg-sky-500/20"
-          : "border-white/10 bg-white/5 hover:bg-white/10"
+          ? "border-blue-500/30 bg-blue-500/[0.08] hover:bg-blue-500/[0.12]"
+          : "border-white/10 bg-white/[0.04] hover:bg-white/[0.07]"
       }`}
     >
       {/* Avatar */}
-      <div className="w-9 h-9 rounded-full bg-slate-700 border border-white/10 overflow-hidden shrink-0 flex items-center justify-center text-sm">
+      <div className="w-9 h-9 rounded-full bg-white/5 border border-white/10 overflow-hidden shrink-0 flex items-center justify-center text-sm">
         {player.avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={player.avatarUrl} alt="" className="w-full h-full object-cover" />
@@ -188,7 +183,7 @@ function PlayerToggle({
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium truncate leading-tight ${selected ? "text-sky-200" : "text-white"}`}>
+        <p className={`text-sm font-medium truncate leading-tight ${selected ? "text-blue-200" : "text-white"}`}>
           {player.firstName} {player.lastName}
         </p>
         <p className="text-xs text-slate-500 truncate mt-0.5">
@@ -202,9 +197,9 @@ function PlayerToggle({
       <div
         className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-all ${
           isLoading
-            ? "border-slate-500"
+            ? "border-slate-600"
             : selected
-              ? "border-sky-400 bg-sky-500"
+              ? "border-blue-400 bg-blue-500"
               : "border-slate-600"
         }`}
       >
