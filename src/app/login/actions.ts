@@ -39,9 +39,9 @@ export async function loginAction(
     if (error instanceof AuthError) {
       switch (error.type) {
         case "CredentialsSignin":
-          return { error: "Email o contraseña incorrectos." };
+          return { error: "Usuario o contraseña incorrectos." };
         case "CallbackRouteError":
-          return { error: "Email o contraseña incorrectos." };
+          return { error: "Usuario o contraseña incorrectos." };
         default:
           return { error: "Ocurrió un error. Intentá de nuevo." };
       }

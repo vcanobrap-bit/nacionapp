@@ -193,7 +193,7 @@ export default async function PlayerProfilePage({ params }: Props) {
       {/* ── Footer ────────────────────────────────────────── */}
       <footer className="mt-auto border-t border-white/[0.06] py-6 text-center">
         <p className="text-xs text-slate-700">
-          © {new Date().getFullYear()} NacionApp · Selección Argentina Femenina
+          © {new Date().getFullYear()} NacionApp · Equipo Nacional Femenino - 🔴🔵
         </p>
       </footer>
     </div>

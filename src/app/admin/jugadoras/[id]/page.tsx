@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import PlayerForm from "./_components/PlayerForm";
+import DeletePlayerButton from "../_components/DeletePlayerButton";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -53,9 +54,12 @@ export default async function EditPlayerPage({ params }: Props) {
         <span className="text-white">{fullName || "Jugadora"}</span>
       </nav>
 
-      <h1 className="text-2xl font-bold text-white mb-6">
-        {fullName || "Editar jugadora"}
-      </h1>
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <h1 className="text-2xl font-bold text-white">
+          {fullName || "Editar jugadora"}
+        </h1>
+        <DeletePlayerButton userId={user.id} playerName={fullName || "esta jugadora"} />
+      </div>
 
       <PlayerForm userId={user.id} profile={profile} />
 

@@ -66,7 +66,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </div>
 
         <p className="text-center text-slate-600 text-xs mt-6">
-          © {new Date().getFullYear()} NacionApp · Selección Argentina Femenina
+          © {new Date().getFullYear()} NacionApp · Nacional Femenino - 🔴🔵
         </p>
       </div>
     </main>

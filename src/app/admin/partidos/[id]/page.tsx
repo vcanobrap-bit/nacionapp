@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: Props) {
 export default async function EditMatchPage({ params }: Props) {
   const { id } = await params;
 
-  const [match, allPlayers] = await Promise.all([
+  const [match, allPlayers, tournaments] = await Promise.all([
     prisma.match.findUnique({
       where: { id },
       include: {
@@ -29,6 +29,10 @@ export default async function EditMatchPage({ params }: Props) {
       where: { role: "PLAYER" },
       include: { profile: true },
       orderBy: { profile: { lastName: "asc" } },
+    }),
+    prisma.tournament.findMany({
+      select: { id: true, name: true, year: true },
+      orderBy: [{ year: "desc" }, { name: "asc" }],
     }),
   ]);
 
@@ -86,7 +90,7 @@ export default async function EditMatchPage({ params }: Props) {
       </div>
 
       {/* Match form */}
-      <MatchForm match={match} />
+      <MatchForm match={match} tournaments={tournaments} />
 
       {/* Convocatoria */}
       <section className="mt-10 border-t border-white/10 pt-8">

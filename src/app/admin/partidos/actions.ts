@@ -4,7 +4,6 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { MatchStatus, MatchResult } from "@/generated/prisma";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 async function requireAdmin() {
   const session = await auth();
@@ -28,6 +27,10 @@ export async function createMatchAction(
 
   if (!date || !opponent) return { error: "Fecha y rival son obligatorios." };
 
+  const tournamentId = (formData.get("tournamentId") as string) || null;
+  const roundRaw = formData.get("round") as string;
+  const fixtureRoundNumberRaw = formData.get("fixtureRoundNumber") as string;
+
   await prisma.match.create({
     data: {
       date: new Date(date),
@@ -36,11 +39,15 @@ export async function createMatchAction(
       notes,
       status: MatchStatus.PENDING,
       createdById: session.user.id,
+      tournamentId: tournamentId || null,
+      round: roundRaw ? parseInt(roundRaw, 10) : null,
+      fixtureRoundNumber: fixtureRoundNumberRaw ? parseInt(fixtureRoundNumberRaw, 10) : null,
     },
   });
 
   revalidatePath("/admin/partidos");
-  redirect("/admin/partidos");
+  revalidatePath("/");
+  return { success: "Partido creado correctamente." };
 }
 
 // ── Actualizar partido (estado / resultado / notas) ────────────────────────
@@ -63,6 +70,9 @@ export async function updateMatchAction(
   const awayScoreRaw = formData.get("awayScore") as string | null;
   const resultRaw = formData.get("result") as string | null;
   const result: MatchResult | null = (resultRaw && resultRaw !== "") ? resultRaw as MatchResult : null;
+  const tournamentId = (formData.get("tournamentId") as string) || null;
+  const roundRaw = formData.get("round") as string;
+  const fixtureRoundNumberRaw = formData.get("fixtureRoundNumber") as string;
 
   if (!date || !opponent) return { error: "Fecha y rival son obligatorios." };
   if (status === MatchStatus.FINISHED && !result) {
@@ -86,10 +96,14 @@ export async function updateMatchAction(
       result,
       homeScore: parseScore(homeScoreRaw),
       awayScore: parseScore(awayScoreRaw),
+      tournamentId: tournamentId || null,
+      round: roundRaw ? parseInt(roundRaw, 10) : null,
+      fixtureRoundNumber: fixtureRoundNumberRaw ? parseInt(fixtureRoundNumberRaw, 10) : null,
     },
   });
 
   revalidatePath("/admin/partidos");
+  revalidatePath("/");
   return { success: "Partido actualizado." };
 }
 
@@ -98,6 +112,7 @@ export async function deleteMatchAction(matchId: string) {
   await requireAdmin();
   await prisma.match.delete({ where: { id: matchId } });
   revalidatePath("/admin/partidos");
+  revalidatePath("/");
 }
 
 // ── Guardar once inicial ───────────────────────────────────────────────────
@@ -134,6 +149,49 @@ export async function saveOnceInicialAction(
 
   revalidatePath(`/admin/partidos/${matchId}/once`);
   revalidatePath("/api/partidos/en-vivo");
+  revalidatePath("/");
+  return { success: "Once inicial guardado." };
+}
+
+// ── Setear titulares directamente desde la vista unificada ─────────────────
+// Hace upsert de PlayerMatch para los titulares y setea isTitular=false al resto.
+export async function setTitularesAction(
+  matchId: string,
+  titularIds: string[]
+): Promise<{ error?: string; success?: string }> {
+  await requireAdmin();
+
+  if (titularIds.length > 11) {
+    return { error: "El once inicial no puede tener más de 11 jugadoras." };
+  }
+
+  const match = await prisma.match.findUnique({ where: { id: matchId } });
+  if (!match) return { error: "Partido no encontrado." };
+  if (match.status !== MatchStatus.IN_PROGRESS) {
+    return { error: "El once inicial solo se puede armar con el partido EN CURSO." };
+  }
+
+  // Upsert PlayerMatch para todos los titulares (auto-agrega si no están convocadas)
+  if (titularIds.length > 0) {
+    await prisma.$transaction(
+      titularIds.map((userId) =>
+        prisma.playerMatch.upsert({
+          where: { userId_matchId: { userId, matchId } },
+          update: { isTitular: true },
+          create: { userId, matchId, isTitular: true },
+        })
+      )
+    );
+  }
+
+  // Desmarcar titulares a los que ya estaban pero no están en la nueva lista
+  await prisma.playerMatch.updateMany({
+    where: { matchId, userId: { notIn: titularIds } },
+    data: { isTitular: false },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/api/partidos/en-vivo");
   return { success: "Once inicial guardado." };
 }
 
@@ -151,6 +209,7 @@ export async function addPlayerToMatchAction(
   });
 
   revalidatePath(`/admin/partidos/${matchId}/once`);
+  revalidatePath("/");
   return {};
 }
 
@@ -163,5 +222,6 @@ export async function removePlayerFromMatchAction(
 
   await prisma.playerMatch.deleteMany({ where: { userId, matchId } });
   revalidatePath(`/admin/partidos/${matchId}/once`);
+  revalidatePath("/");
   return {};
 }

@@ -37,6 +37,12 @@ export default async function AdminLayout({
             >
               Partidos
             </Link>
+            <Link
+              href="/admin/torneos"
+              className="text-sm text-slate-400 hover:text-white px-3 py-1.5 rounded-full hover:bg-white/[0.06] transition-colors"
+            >
+              Campeonatos
+            </Link>
           </nav>
 
           <div className="flex items-center gap-2">

@@ -16,7 +16,10 @@ const RESULT_COLOR = { WIN: "text-emerald-300", LOSS: "text-red-300", DRAW: "tex
 export default async function PartidosPage() {
   const matches = await prisma.match.findMany({
     orderBy: { date: "desc" },
-    include: { _count: { select: { players: true } } },
+    include: {
+      _count: { select: { players: true } },
+      tournament: { select: { name: true, year: true } },
+    },
   });
 
   return (
@@ -75,6 +78,14 @@ export default async function PartidosPage() {
                       )}
                     </div>
                     <p className="text-xs text-slate-500 mt-1">
+                      {match.tournament && (
+                        <span className="text-blue-400/70 font-medium">
+                          {match.tournament.name} {match.tournament.year}
+                          {match.round != null ? ` · R${match.round}` : ""}
+                          {match.fixtureRoundNumber != null ? ` · F${match.fixtureRoundNumber}` : ""}
+                          {" · "}
+                        </span>
+                      )}
                       {new Date(match.date).toLocaleDateString("es-AR", {
                         weekday: "long",
                         day: "2-digit",

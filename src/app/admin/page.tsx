@@ -9,9 +9,10 @@ export default async function AdminPage() {
   const session = await auth();
   if (!session || session.user.role !== "ADMIN") redirect("/login");
 
-  const [totalPlayers, totalMatches, liveMatch] = await Promise.all([
+  const [totalPlayers, totalMatches, totalTournaments, liveMatch] = await Promise.all([
     prisma.user.count({ where: { role: "PLAYER" } }),
     prisma.match.count(),
+    prisma.tournament.count(),
     prisma.match.findFirst({
       where: { status: "IN_PROGRESS" },
       select: { opponent: true, date: true },
@@ -32,6 +33,13 @@ export default async function AdminPage() {
       desc: "Crear partidos, marcar titulares y cargar resultados",
       href: "/admin/partidos",
       stat: `${totalMatches} partidos`,
+    },
+    {
+      label: "Campeonatos",
+      icon: "🏆",
+      desc: "Crear y gestionar torneos, ruedas y fixtures",
+      href: "/admin/torneos",
+      stat: `${totalTournaments} campeonato${totalTournaments !== 1 ? "s" : ""}`,
     },
   ];
 

@@ -5,8 +5,15 @@ import Link from "next/link";
 import type { Match, MatchStatus, MatchResult } from "@/generated/prisma";
 import { createMatchAction, updateMatchAction, type MatchFormState } from "../actions";
 
+export interface TournamentOption {
+  id: string;
+  name: string;
+  year: number;
+}
+
 interface Props {
   match?: Match;
+  tournaments: TournamentOption[];
 }
 
 function toDatetimeLocal(d: Date | string | null | undefined): string {
@@ -27,7 +34,7 @@ const RESULT_OPTIONS: { value: MatchResult | ""; label: string }[] = [
   { value: "DRAW", label: "Empate"                  },
 ];
 
-export default function MatchForm({ match }: Props) {
+export default function MatchForm({ match, tournaments }: Props) {
   const action = match ? updateMatchAction : createMatchAction;
   const [state, formAction, pending] = useActionState<MatchFormState, FormData>(
     action,
@@ -58,7 +65,7 @@ export default function MatchForm({ match }: Props) {
         </div>
       )}
 
-      {/* Datos básicos */}
+      {/* ── Datos básicos ─────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
@@ -117,7 +124,63 @@ export default function MatchForm({ match }: Props) {
         </div>
       </div>
 
-      {/* CTA once inicial — solo cuando EN CURSO */}
+      {/* ── Campeonato / Fixture ───────────────────────────────── */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 space-y-4">
+        <p className="text-xs uppercase tracking-widest text-slate-500 font-medium">
+          Campeonato
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="sm:col-span-1">
+            <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
+              Torneo
+            </label>
+            <select
+              name="tournamentId"
+              defaultValue={match?.tournamentId ?? ""}
+              className={field + " [color-scheme:dark]"}
+            >
+              <option value="">Sin campeonato</option>
+              {tournaments.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} {t.year}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
+              Rueda
+            </label>
+            <input
+              type="number"
+              name="round"
+              min="1"
+              max="10"
+              defaultValue={match?.round?.toString() ?? ""}
+              placeholder="ej: 1"
+              className={field}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
+              Fecha Nº
+            </label>
+            <input
+              type="number"
+              name="fixtureRoundNumber"
+              min="1"
+              max="100"
+              defaultValue={match?.fixtureRoundNumber?.toString() ?? ""}
+              placeholder="ej: 5"
+              className={field}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ── CTA once inicial ── solo cuando EN CURSO ─────────── */}
       {isInProgress && match && (
         <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] px-5 py-4">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
@@ -136,7 +199,7 @@ export default function MatchForm({ match }: Props) {
         </div>
       )}
 
-      {/* Resultado — solo cuando FINALIZADO */}
+      {/* ── Resultado ── solo cuando FINALIZADO ──────────────── */}
       {isFinished && (
         <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 space-y-4">
           <p className="text-xs uppercase tracking-widest text-slate-500 font-medium">
@@ -189,7 +252,7 @@ export default function MatchForm({ match }: Props) {
         </div>
       )}
 
-      {/* Notas internas */}
+      {/* ── Notas internas ───────────────────────────────────── */}
       <div>
         <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
           Notas internas

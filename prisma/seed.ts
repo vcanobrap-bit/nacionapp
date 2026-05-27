@@ -28,12 +28,12 @@ async function main() {
   console.log("🌱 Seeding database…");
 
   // ── Admin ──────────────────────────────────────────────
-  const adminPassword = await bcrypt.hash("Admin1234!", SALT_ROUNDS);
+  const adminPassword = await bcrypt.hash("nacional123", SALT_ROUNDS);
   const admin = await prisma.user.upsert({
-    where: { email: "admin@nacion.com" },
+    where: { email: "vcanobra" },
     update: { password: adminPassword },
     create: {
-      email: "admin@nacion.com",
+      email: "vcanobra",
       password: adminPassword,
       role: Role.ADMIN,
       profile: {
@@ -222,7 +222,7 @@ async function main() {
 
   console.log("\n✅ Seed completado.");
   console.log("\n📋 Credenciales de prueba:");
-  console.log("   ADMIN  → admin@nacion.com      / Admin1234!");
+  console.log("   ADMIN  → vcanobra              / nacional123");
   console.log("   PLAYER → jugadora1@nacion.com  / Player1234!");
 }
 

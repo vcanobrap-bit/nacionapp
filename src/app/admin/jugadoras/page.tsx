@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import AddPlayerModal from "./_components/AddPlayerModal";
 
 export const metadata = { title: "Jugadoras · Admin · NacionApp" };
 
@@ -29,6 +30,7 @@ export default async function JugadorasPage() {
           <h1 className="text-2xl font-semibold text-white tracking-tight">Jugadoras</h1>
           <p className="text-slate-500 text-sm mt-0.5">{players.length} en el plantel</p>
         </div>
+        <AddPlayerModal />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

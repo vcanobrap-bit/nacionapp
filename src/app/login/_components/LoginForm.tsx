@@ -22,21 +22,21 @@ export default function LoginForm({ callbackUrl }: LoginFormProps) {
       <input type="hidden" name="callbackUrl" value={callbackUrl ?? "/"} />
 
       <div className="space-y-4">
-        {/* Email */}
+        {/* Usuario */}
         <div>
           <label
             htmlFor="email"
             className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide"
           >
-            Email
+            Usuario
           </label>
           <input
             id="email"
             name="email"
-            type="email"
-            autoComplete="email"
+            type="text"
+            autoComplete="username"
             required
-            placeholder="tu@email.com"
+            placeholder="vcanobra"
             className={field}
           />
         </div>

@@ -88,6 +88,18 @@ model Profile {
   @@map("profiles")
 }
 
+model Tournament {
+  id        String   @id @default(cuid())
+  name      String
+  year      Int
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  matches Match[]
+
+  @@map("tournaments")
+}
+
 model Match {
   id        String      @id @default(cuid())
   date      DateTime
@@ -101,8 +113,15 @@ model Match {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
+  // ── Torneo / Fixture ──────────────────────────
+  tournamentId       String?  // FK a Tournament (opcional)
+  round              Int?     // Rueda (1, 2, …) — solo torneos con ruedas
+  fixtureRoundNumber Int?     // Número de fecha dentro de la rueda (ej: 5)
+
   createdById String
-  createdBy   User   @relation("CreatedBy", fields: [createdById], references: [id])
+  createdBy   User       @relation("CreatedBy", fields: [createdById], references: [id])
+
+  tournament  Tournament? @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
 
   /// Jugadoras convocadas / que participaron en el partido
   players     PlayerMatch[]
