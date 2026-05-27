@@ -54,6 +54,34 @@ export interface PlayerData {
   adminComments?: string | null;
 }
 
+export interface MatchEventData {
+  id: string;
+  type: "GOAL" | "AMARILLA" | "ROJA";
+  isOwn: boolean;
+  minute: number | null;
+  playerName: string | null;  // null = sin jugadora asignada o gol rival
+}
+
+export interface LiveMatchConvocada {
+  userId: string;
+  name: string;
+  number: number | null;
+  position: string | null;
+}
+
+export interface LiveMatchData {
+  id: string;
+  opponent: string;
+  venue: string | null;
+  homeScore: number;
+  awayScore: number;
+  tournamentName: string | null;
+  once: OncePlayer[];
+  events: MatchEventData[];
+  // Admin-only
+  convocadas?: LiveMatchConvocada[];
+}
+
 export interface StatsData {
   pj: number;           // Partidos jugados (FINISHED)
   v: number;            // Victorias
@@ -106,6 +134,12 @@ export default async function HomePage() {
           },
         },
         tournament: { select: { name: true } },
+        events: {
+          orderBy: { createdAt: "asc" },
+          include: {
+            player: { include: { profile: true } },
+          },
+        },
       },
     }),
     prisma.user.findMany({
@@ -221,6 +255,58 @@ export default async function HomePage() {
         })
     : players;
 
+  // ── Partido en vivo con eventos ────────────────────────────────
+  const rawLive = rawMatches.find((m) => m.status === "IN_PROGRESS") ?? null;
+
+  const liveMatch: LiveMatchData | null = rawLive
+    ? {
+        id: rawLive.id,
+        opponent: rawLive.opponent,
+        venue: rawLive.venue,
+        homeScore: rawLive.homeScore ?? 0,
+        awayScore: rawLive.awayScore ?? 0,
+        tournamentName: rawLive.tournament?.name ?? null,
+        once: rawLive.players
+          .filter((pm) => pm.isTitular)
+          .map((pm) => ({
+            name: `${pm.user.profile?.firstName ?? ""} ${pm.user.profile?.lastName ?? ""}`.trim(),
+            number: pm.user.profile?.number ?? null,
+            position: pm.user.profile?.idealPosition ?? null,
+            avatarUrl: pm.user.profile?.avatarUrl ?? null,
+          }))
+          .sort((a, b) => {
+            const ai = positionOrder.indexOf(a.position ?? "");
+            const bi = positionOrder.indexOf(b.position ?? "");
+            return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+          }),
+        events: rawLive.events.map((ev) => ({
+          id: ev.id,
+          type: ev.type as "GOAL" | "AMARILLA" | "ROJA",
+          isOwn: ev.isOwn,
+          minute: ev.minute,
+          playerName: ev.player?.profile
+            ? `${ev.player.profile.firstName} ${ev.player.profile.lastName}`.trim()
+            : null,
+        })),
+        // Admin: lista de convocadas para los botones de acción
+        convocadas: isAdmin
+          ? rawLive.players
+              .map((pm) => ({
+                userId: pm.userId,
+                name: `${pm.user.profile?.firstName ?? ""} ${pm.user.profile?.lastName ?? ""}`.trim(),
+                number: pm.user.profile?.number ?? null,
+                position: pm.user.profile?.idealPosition ?? null,
+              }))
+              .sort((a, b) => {
+                const ai = positionOrder.indexOf(a.position ?? "");
+                const bi = positionOrder.indexOf(b.position ?? "");
+                if (ai !== bi) return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+                return a.name.localeCompare(b.name);
+              })
+          : undefined,
+      }
+    : null;
+
   return (
     <AppShell
       matches={adminMatches}
@@ -228,6 +314,7 @@ export default async function HomePage() {
       stats={stats}
       tournaments={tournaments}
       adminEmail={adminEmail}
+      liveMatch={liveMatch}
     />
   );
 }

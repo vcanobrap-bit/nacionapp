@@ -7,7 +7,8 @@ import WebGLBackground from "./WebGLBackground";
 import { logoutAction } from "@/app/auth-actions";
 import MatchModal from "./admin/MatchModal";
 import PlayerModal from "./admin/PlayerModal";
-import type { MatchData, PlayerData, StatsData, OncePlayer, TournamentData } from "../page";
+import LiveMatchCard from "./LiveMatchCard";
+import type { MatchData, PlayerData, StatsData, OncePlayer, TournamentData, LiveMatchData } from "../page";
 
 // ── Types ─────────────────────────────────────────────────
 type Tab = "posiciones" | "partidos" | "plantel";
@@ -92,13 +93,14 @@ function PencilIcon() {
 
 // ── Main component ────────────────────────────────────────
 export default function AppShell({
-  matches, players, stats, tournaments, adminEmail,
+  matches, players, stats, tournaments, adminEmail, liveMatch,
 }: {
   matches: MatchData[];
   players: PlayerData[];
   stats: StatsData;
   tournaments: TournamentData[];
   adminEmail: string | null;
+  liveMatch: LiveMatchData | null;
 }) {
   const isAdmin = adminEmail !== null;
 
@@ -251,6 +253,8 @@ export default function AppShell({
             stats={filteredStats}
             nextMatch={nextMatch}
             hasLive={hasLive}
+            liveMatch={liveMatch}
+            isAdmin={isAdmin}
           />
         )}
         {tab === "partidos" && (
@@ -395,15 +399,24 @@ function PosicionesTab({
   stats,
   nextMatch,
   hasLive,
+  liveMatch,
+  isAdmin,
 }: {
   stats: StatsData;
   nextMatch: MatchData | null;
   hasLive: boolean;
+  liveMatch: LiveMatchData | null;
+  isAdmin: boolean;
 }) {
   const dif = stats.gf - stats.gc;
 
   return (
     <div className="space-y-3">
+
+      {/* Tarjeta en vivo — prioritaria cuando hay partido en curso */}
+      {liveMatch && (
+        <LiveMatchCard match={liveMatch} isAdmin={isAdmin} />
+      )}
 
       {nextMatch && !hasLive && <ProximoPartidoCard match={nextMatch} />}
 

@@ -2,7 +2,7 @@
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { MatchStatus, MatchResult } from "@/generated/prisma";
+import { MatchStatus, MatchResult, EventType } from "@/generated/prisma";
 import { revalidatePath } from "next/cache";
 
 async function requireAdmin() {
@@ -224,4 +224,134 @@ export async function removePlayerFromMatchAction(
   revalidatePath(`/admin/partidos/${matchId}/once`);
   revalidatePath("/");
   return {};
+}
+
+// ═══════════════════════════════════════════════════════════
+// ACCIONES DE PARTIDO EN VIVO
+// ═══════════════════════════════════════════════════════════
+
+function revalidateLive() {
+  revalidatePath("/");
+  revalidatePath("/api/partidos/en-vivo");
+}
+
+async function requireInProgress(matchId: string) {
+  const match = await prisma.match.findUnique({ where: { id: matchId } });
+  if (!match) throw new Error("Partido no encontrado.");
+  if (match.status !== MatchStatus.IN_PROGRESS)
+    throw new Error("El partido no está en curso.");
+  return match;
+}
+
+// ── Registrar gol propio ───────────────────────────────────────────────────
+export async function addHomeGoalAction(
+  matchId: string,
+  playerId: string | null,
+  minute: number | null
+): Promise<{ error?: string; success?: string }> {
+  try {
+    await requireAdmin();
+    await requireInProgress(matchId);
+
+    await prisma.$transaction([
+      prisma.matchEvent.create({
+        data: { matchId, type: EventType.GOAL, isOwn: true, playerId, minute },
+      }),
+      prisma.match.update({
+        where: { id: matchId },
+        data: { homeScore: { increment: 1 } },
+      }),
+    ]);
+
+    revalidateLive();
+    return { success: "¡Gol registrado!" };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ── Registrar gol del rival ────────────────────────────────────────────────
+export async function addAwayGoalAction(
+  matchId: string,
+  minute: number | null
+): Promise<{ error?: string; success?: string }> {
+  try {
+    await requireAdmin();
+    await requireInProgress(matchId);
+
+    await prisma.$transaction([
+      prisma.matchEvent.create({
+        data: { matchId, type: EventType.GOAL, isOwn: false, minute },
+      }),
+      prisma.match.update({
+        where: { id: matchId },
+        data: { awayScore: { increment: 1 } },
+      }),
+    ]);
+
+    revalidateLive();
+    return { success: "Gol rival registrado." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ── Registrar tarjeta ──────────────────────────────────────────────────────
+export async function addCardAction(
+  matchId: string,
+  type: "AMARILLA" | "ROJA",
+  playerId: string,
+  minute: number | null
+): Promise<{ error?: string; success?: string }> {
+  try {
+    await requireAdmin();
+    await requireInProgress(matchId);
+
+    await prisma.matchEvent.create({
+      data: {
+        matchId,
+        type: type === "AMARILLA" ? EventType.AMARILLA : EventType.ROJA,
+        isOwn: true,
+        playerId,
+        minute,
+      },
+    });
+
+    revalidateLive();
+    return { success: "Tarjeta registrada." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ── Finalizar partido ──────────────────────────────────────────────────────
+// Calcula el resultado automáticamente a partir del marcador actual.
+export async function finishMatchAction(
+  matchId: string
+): Promise<{ error?: string; success?: string }> {
+  try {
+    await requireAdmin();
+    const match = await requireInProgress(matchId);
+
+    const home = match.homeScore ?? 0;
+    const away = match.awayScore ?? 0;
+    const result: MatchResult =
+      home > away ? MatchResult.WIN : home < away ? MatchResult.LOSS : MatchResult.DRAW;
+
+    await prisma.match.update({
+      where: { id: matchId },
+      data: {
+        status: MatchStatus.FINISHED,
+        result,
+        homeScore: home,
+        awayScore: away,
+      },
+    });
+
+    revalidateLive();
+    revalidatePath("/admin/partidos");
+    return { success: "Partido finalizado." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
