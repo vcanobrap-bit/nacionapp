@@ -109,3 +109,4 @@ npm run lint         # ESLint
 5. **Tailwind v4**: no existe `tailwind.config.js`; la configuración va en CSS con `@theme`.
 6. **`db:push --accept-data-loss`**: usar cuando se renombran enums o columnas en dev (datos se re-crean con seed).
 7. **Acciones de partido en vivo** (`addHomeGoalAction`, `addAwayGoalAction`, `addCardAction`, `finishMatchAction`): solo funcionan con `status === IN_PROGRESS`; `finishMatchAction` calcula el resultado automáticamente del marcador.
+8. **Lazy Prisma singleton**: `src/lib/prisma.ts` usa un Proxy para inicialización lazy. Vercel marca `DATABASE_URL` como variable sensible (solo runtime), por lo que el cliente Prisma **no** puede instanciarse durante el build. Nunca mover la inicialización fuera del Proxy o se romperá el build en producción.
