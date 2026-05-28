@@ -33,18 +33,6 @@ function AddPlayerForm({ onSuccess }: { onSuccess: () => void }) {
         <MField label="Apellido" name="lastName" required />
       </div>
 
-      {/* Email */}
-      <MField label="Email" name="email" type="email" required placeholder="jugadora@ejemplo.com" />
-
-      {/* Contraseña */}
-      <MField
-        label="Contraseña inicial"
-        name="password"
-        type="password"
-        required
-        placeholder="Mín. 6 caracteres"
-      />
-
       {/* Fecha e ingreso */}
       <div className="grid grid-cols-2 gap-3">
         <MField label="Fecha de nacimiento" name="birthdate" type="date" />
@@ -143,7 +131,7 @@ export default function AddPlayerModal() {
               <div>
                 <h2 className="text-lg font-semibold text-white">Nueva jugadora</h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Se crea con rol Jugadora — no puede acceder al panel admin.
+                  Perfil deportivo — sin acceso a la plataforma.
                 </p>
               </div>
               <button

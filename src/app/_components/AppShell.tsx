@@ -7,6 +7,7 @@ import WebGLBackground from "./WebGLBackground";
 import { logoutAction } from "@/app/auth-actions";
 import MatchModal from "./admin/MatchModal";
 import PlayerModal from "./admin/PlayerModal";
+import AddAdminModal from "./admin/AddAdminModal";
 import LiveMatchCard from "./LiveMatchCard";
 import type { MatchData, PlayerData, StatsData, OncePlayer, TournamentData, LiveMatchData } from "../page";
 
@@ -110,15 +111,23 @@ export default function AppShell({
   // ── Modal state ──────────────────────────────────────────
   const [matchModalOpen, setMatchModalOpen] = useState(false);
   const [editingMatch, setEditingMatch] = useState<MatchData | undefined>(undefined);
+  const [matchInitialTab, setMatchInitialTab] = useState<"partido" | "once">("partido");
   const [playerModalOpen, setPlayerModalOpen] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<PlayerData | undefined>(undefined);
 
   function openNewMatch() {
     setEditingMatch(undefined);
+    setMatchInitialTab("partido");
     setMatchModalOpen(true);
   }
   function openEditMatch(match: MatchData) {
     setEditingMatch(match);
+    setMatchInitialTab("partido");
+    setMatchModalOpen(true);
+  }
+  function openCompleteOnce(match: MatchData) {
+    setEditingMatch(match);
+    setMatchInitialTab("once");
     setMatchModalOpen(true);
   }
   function openNewPlayer() {
@@ -263,6 +272,7 @@ export default function AppShell({
             isAdmin={isAdmin}
             onAddMatch={openNewMatch}
             onEditMatch={openEditMatch}
+            onCompleteOnce={openCompleteOnce}
           />
         )}
         {tab === "plantel" && (
@@ -291,6 +301,7 @@ export default function AppShell({
             match={editingMatch}
             tournaments={tournaments}
             players={players}
+            initialTab={matchInitialTab}
           />
           <PlayerModal
             isOpen={playerModalOpen}
@@ -541,11 +552,13 @@ function PartidosTab({
   isAdmin,
   onAddMatch,
   onEditMatch,
+  onCompleteOnce,
 }: {
   matches: MatchData[];
   isAdmin: boolean;
   onAddMatch: () => void;
   onEditMatch: (m: MatchData) => void;
+  onCompleteOnce: (m: MatchData) => void;
 }) {
   if (matches.length === 0 && !isAdmin) {
     return <EmptyState message="No hay partidos en este campeonato todavía." />;
@@ -560,6 +573,7 @@ function PartidosTab({
         match={m}
         isAdmin={isAdmin}
         onEdit={() => onEditMatch(m)}
+        onCompleteOnce={() => onCompleteOnce(m)}
       />
     ));
 
@@ -654,10 +668,12 @@ function MatchCard({
   match,
   isAdmin,
   onEdit,
+  onCompleteOnce,
 }: {
   match: MatchData;
   isAdmin: boolean;
   onEdit: () => void;
+  onCompleteOnce?: () => void;
 }) {
   const isLive     = match.status === "IN_PROGRESS";
   const isFinished = match.status === "FINISHED";
@@ -770,7 +786,7 @@ function MatchCard({
         {isAdmin && isLive && match.once.length === 0 && (
           <button
             type="button"
-            onClick={onEdit}
+            onClick={onCompleteOnce ?? onEdit}
             className="mt-3 w-full text-xs text-emerald-400/70 border border-emerald-500/10 hover:border-emerald-500/20 hover:text-emerald-300 rounded-xl py-2 transition-all text-center"
           >
             ⚽ Completar once inicial →
@@ -863,9 +879,10 @@ function PlantelTab({
 
   return (
     <div className="space-y-8">
-      {/* ── Botón mágico: Agregar jugadora ─── */}
+      {/* ── Botones admin ─── */}
       {isAdmin && (
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-2 flex-wrap">
+          <AddAdminModal />
           <button
             type="button"
             onClick={onAddPlayer}

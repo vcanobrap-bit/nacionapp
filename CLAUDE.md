@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 @AGENTS.md
 
 # NacionApp — Contexto del proyecto
@@ -33,13 +37,17 @@
 ## Modelos clave
 
 ```
-User       → id, email, password, role (ADMIN | PLAYER)
-Profile    → firstName, lastName, avatarUrl, birthdate, joiningYear, idealPosition,
-             number, nationality, bio [PÚBLICO]
-             status (AVAILABLE | INJURED), adminComments [PRIVADO/ADMIN]
-Match      → date, opponent, venue, status (PENDING | IN_PROGRESS | FINISHED),
-             result (WIN | LOSS | DRAW), homeScore, awayScore
-PlayerMatch → userId, matchId, isTitular (bool) — historial de titularidades
+User         → id, email, password, role (ADMIN | PLAYER)
+Profile      → firstName, lastName, avatarUrl, birthdate, joiningYear, idealPosition,
+               number, nationality, bio [PÚBLICO]
+               status (AVAILABLE | INJURED), adminComments [PRIVADO/ADMIN]
+Tournament   → name, year, isActive — campeonatos; FK SetNull en Match al borrar
+Match        → date, opponent, venue, status (PENDING | IN_PROGRESS | FINISHED),
+               result (WIN | LOSS | DRAW), homeScore, awayScore, notes,
+               tournamentId?, round?, fixtureRoundNumber?
+MatchEvent   → matchId, type (GOAL | AMARILLA | ROJA), isOwn (bool),
+               playerId?, minute? — incidencias del partido en vivo
+PlayerMatch  → userId, matchId, isTitular (bool) — convocatoria y titularidad
 ```
 
 ## Rutas del panel admin
@@ -51,22 +59,34 @@ PlayerMatch → userId, matchId, isTitular (bool) — historial de titularidades
 | `/admin/jugadoras/[id]` | Edición completa + historial |
 | `/admin/partidos` | Listado de partidos |
 | `/admin/partidos/nuevo` | Crear partido |
-| `/admin/partidos/[id]` | Editar partido (estado, resultado, score) |
-| `/admin/partidos/[id]/once` | Once inicial — solo con `IN_PROGRESS` |
+| `/admin/partidos/[id]` | Editar partido (estado, resultado, score, torneo) |
+| `/admin/partidos/[id]/once` | Convocatoria + once inicial — solo con `IN_PROGRESS` |
+| `/admin/torneos` | Gestión de campeonatos |
 
 ## API pública
 
 | Endpoint | Descripción |
 |---|---|
-| `GET /api/partidos/en-vivo` | Partido `IN_PROGRESS` con once titular (o `{ match: null }`) |
+| `GET /api/partidos/en-vivo` | Partido `IN_PROGRESS` con once titular y eventos (o `{ match: null }`) |
+
+## Importaciones Prisma
+
+El cliente Prisma se genera en `src/generated/prisma` (no en `@prisma/client`):
+
+```ts
+import { PrismaClient, MatchStatus, EventType } from "@/generated/prisma";
+import { PrismaPg } from "@prisma/adapter-pg";
+```
 
 ## Convenciones del proyecto
 
 - Server Actions en `actions.ts` junto a su ruta; Client Components en `_components/`
 - Todos los formularios usan `useActionState` (React 19) — nunca `useState` manual para forms
+- Server Actions protegen sus mutaciones con `requireAdmin()` (llama a `auth()` y verifica `role`)
 - Nombres en español (variables, labels, mensajes de error)
 - Clases Tailwind: tema `slate-950` / `sky-500` para el admin, gradiente `slate-900 → blue-950` para login
 - `revalidatePath` después de toda mutación
+- Sistema de diseño visual documentado en `DESIGN.md` (glass surfaces, gradientes, radios, motion)
 
 ## Scripts npm
 
@@ -75,14 +95,17 @@ npm run dev          # Servidor de desarrollo
 npm run build        # prisma generate + next build
 npm run db:push      # Sincronizar schema con Supabase (dev)
 npm run db:generate  # Regenerar cliente Prisma
-npm run db:seed      # Poblar con datos de ejemplo
+npm run db:seed      # Poblar con datos de ejemplo (tsx prisma/seed.ts)
 npm run db:studio    # Prisma Studio
+npm run lint         # ESLint
 ```
 
 ## Gotchas importantes
 
 1. **Prisma 7**: `PrismaClient` siempre necesita `adapter: new PrismaPg({ connectionString })`. Sin el adapter, lanza `PrismaClientInitializationError`.
-2. **Next.js 16**: el archivo de middleware se llama `src/proxy.ts`, no `middleware.ts`.
-3. **Auth.js v5**: los redirects exitosos de `signIn` se lanzan como error (`NEXT_REDIRECT`). Re-propagarlos con `throw error` en el catch.
-4. **Tailwind v4**: no existe `tailwind.config.js`; la configuración va en CSS con `@theme`.
-5. **`db:push --accept-data-loss`**: usar cuando se renombran enums o columnas en dev (datos se re-crean con seed).
+2. **Prisma client path**: importar desde `@/generated/prisma`, nunca desde `@prisma/client`.
+3. **Next.js 16**: el archivo de middleware se llama `src/proxy.ts`, no `middleware.ts`.
+4. **Auth.js v5**: los redirects exitosos de `signIn` se lanzan como error (`NEXT_REDIRECT`). Re-propagarlos con `throw error` en el catch.
+5. **Tailwind v4**: no existe `tailwind.config.js`; la configuración va en CSS con `@theme`.
+6. **`db:push --accept-data-loss`**: usar cuando se renombran enums o columnas en dev (datos se re-crean con seed).
+7. **Acciones de partido en vivo** (`addHomeGoalAction`, `addAwayGoalAction`, `addCardAction`, `finishMatchAction`): solo funcionan con `status === IN_PROGRESS`; `finishMatchAction` calcula el resultado automáticamente del marcador.

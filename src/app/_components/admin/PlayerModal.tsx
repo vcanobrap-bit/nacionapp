@@ -107,21 +107,6 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
         <F label="Apellido" name="lastName" required />
       </div>
 
-      <F
-        label="Email"
-        name="email"
-        type="email"
-        required
-        placeholder="jugadora@ejemplo.com"
-      />
-      <F
-        label="Contraseña inicial"
-        name="password"
-        type="password"
-        required
-        placeholder="Mín. 6 caracteres"
-      />
-
       <div className="grid grid-cols-2 gap-3">
         <F label="Fecha de nacimiento" name="birthdate" type="date" />
         <F
@@ -400,7 +385,7 @@ export default function PlayerModal({
             <p className="text-xs text-slate-500 mt-0.5">
               {isEdit
                 ? "Editá el perfil y datos del cuerpo técnico"
-                : "Se crea con rol Jugadora — no puede acceder como admin"}
+                : "Perfil deportivo — sin acceso a la plataforma"}
             </p>
           </div>
           <button

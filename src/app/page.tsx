@@ -56,10 +56,11 @@ export interface PlayerData {
 
 export interface MatchEventData {
   id: string;
-  type: "GOAL" | "AMARILLA" | "ROJA";
+  type: "GOAL" | "AMARILLA" | "ROJA" | "CAMBIO";
   isOwn: boolean;
   minute: number | null;
-  playerName: string | null;  // null = sin jugadora asignada o gol rival
+  playerName: string | null;   // autora del gol/tarjeta; o jugadora que Sale en CAMBIO
+  player2Name: string | null;  // jugadora que Entra en CAMBIO (null para otros tipos)
 }
 
 export interface LiveMatchConvocada {
@@ -67,6 +68,7 @@ export interface LiveMatchConvocada {
   name: string;
   number: number | null;
   position: string | null;
+  isTitular: boolean;
 }
 
 export interface LiveMatchData {
@@ -137,7 +139,8 @@ export default async function HomePage() {
         events: {
           orderBy: { createdAt: "asc" },
           include: {
-            player: { include: { profile: true } },
+            player:  { include: { profile: true } },
+            player2: { include: { profile: true } },
           },
         },
       },
@@ -280,22 +283,26 @@ export default async function HomePage() {
             return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
           }),
         events: rawLive.events.map((ev) => ({
-          id: ev.id,
-          type: ev.type as "GOAL" | "AMARILLA" | "ROJA",
-          isOwn: ev.isOwn,
-          minute: ev.minute,
-          playerName: ev.player?.profile
+          id:          ev.id,
+          type:        ev.type as MatchEventData["type"],
+          isOwn:       ev.isOwn,
+          minute:      ev.minute,
+          playerName:  ev.player?.profile
             ? `${ev.player.profile.firstName} ${ev.player.profile.lastName}`.trim()
             : null,
+          player2Name: ev.player2?.profile
+            ? `${ev.player2.profile.firstName} ${ev.player2.profile.lastName}`.trim()
+            : null,
         })),
-        // Admin: lista de convocadas para los botones de acción
+        // Admin: lista de convocadas para los botones de acción (incluye isTitular)
         convocadas: isAdmin
           ? rawLive.players
               .map((pm) => ({
-                userId: pm.userId,
-                name: `${pm.user.profile?.firstName ?? ""} ${pm.user.profile?.lastName ?? ""}`.trim(),
-                number: pm.user.profile?.number ?? null,
-                position: pm.user.profile?.idealPosition ?? null,
+                userId:    pm.userId,
+                name:      `${pm.user.profile?.firstName ?? ""} ${pm.user.profile?.lastName ?? ""}`.trim(),
+                number:    pm.user.profile?.number ?? null,
+                position:  pm.user.profile?.idealPosition ?? null,
+                isTitular: pm.isTitular,
               }))
               .sort((a, b) => {
                 const ai = positionOrder.indexOf(a.position ?? "");

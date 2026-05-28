@@ -497,15 +497,17 @@ export default function MatchModal({
   match,
   tournaments,
   players,
+  initialTab = "partido",
 }: {
   isOpen: boolean;
   onClose: () => void;
   match?: MatchData;
   tournaments: TournamentData[];
   players: PlayerData[];
+  initialTab?: Tab;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("partido");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [formKey, setFormKey] = useState(0);
 
   const isEdit = !!match;
@@ -514,10 +516,10 @@ export default function MatchModal({
 
   useEffect(() => {
     if (isOpen) {
-      setTab("partido");
+      setTab(initialTab);
       setFormKey((k) => k + 1);
     }
-  }, [isOpen, match?.id]);
+  }, [isOpen, match?.id, initialTab]);
 
   const handleSuccess = useCallback(() => {
     onClose();

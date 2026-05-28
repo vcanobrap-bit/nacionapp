@@ -244,6 +244,8 @@ async function requireInProgress(matchId: string) {
 }
 
 // ── Registrar gol propio ───────────────────────────────────────────────────
+// Usa transacción interactiva para leer el score actual antes de sumar,
+// evitando el bug de NULL + 1 = NULL en PostgreSQL cuando score no fue inicializado.
 export async function addHomeGoalAction(
   matchId: string,
   playerId: string | null,
@@ -251,17 +253,20 @@ export async function addHomeGoalAction(
 ): Promise<{ error?: string; success?: string }> {
   try {
     await requireAdmin();
-    await requireInProgress(matchId);
 
-    await prisma.$transaction([
-      prisma.matchEvent.create({
+    await prisma.$transaction(async (tx) => {
+      const match = await tx.match.findUnique({ where: { id: matchId } });
+      if (!match) throw new Error("Partido no encontrado.");
+      if (match.status !== MatchStatus.IN_PROGRESS) throw new Error("El partido no está en curso.");
+
+      await tx.matchEvent.create({
         data: { matchId, type: EventType.GOAL, isOwn: true, playerId, minute },
-      }),
-      prisma.match.update({
+      });
+      await tx.match.update({
         where: { id: matchId },
-        data: { homeScore: { increment: 1 } },
-      }),
-    ]);
+        data: { homeScore: (match.homeScore ?? 0) + 1 },
+      });
+    });
 
     revalidateLive();
     return { success: "¡Gol registrado!" };
@@ -277,17 +282,20 @@ export async function addAwayGoalAction(
 ): Promise<{ error?: string; success?: string }> {
   try {
     await requireAdmin();
-    await requireInProgress(matchId);
 
-    await prisma.$transaction([
-      prisma.matchEvent.create({
+    await prisma.$transaction(async (tx) => {
+      const match = await tx.match.findUnique({ where: { id: matchId } });
+      if (!match) throw new Error("Partido no encontrado.");
+      if (match.status !== MatchStatus.IN_PROGRESS) throw new Error("El partido no está en curso.");
+
+      await tx.matchEvent.create({
         data: { matchId, type: EventType.GOAL, isOwn: false, minute },
-      }),
-      prisma.match.update({
+      });
+      await tx.match.update({
         where: { id: matchId },
-        data: { awayScore: { increment: 1 } },
-      }),
-    ]);
+        data: { awayScore: (match.awayScore ?? 0) + 1 },
+      });
+    });
 
     revalidateLive();
     return { success: "Gol rival registrado." };
@@ -324,6 +332,93 @@ export async function addCardAction(
   }
 }
 
+// ── Eliminar incidencia ────────────────────────────────────────────────────
+// Si era un gol, descuenta automáticamente el marcador (mínimo 0).
+export async function deleteEventAction(
+  eventId: string
+): Promise<{ error?: string; success?: string }> {
+  try {
+    await requireAdmin();
+
+    await prisma.$transaction(async (tx) => {
+      const event = await tx.matchEvent.findUnique({ where: { id: eventId } });
+      if (!event) throw new Error("Incidencia no encontrada.");
+
+      await tx.matchEvent.delete({ where: { id: eventId } });
+
+      if (event.type === EventType.GOAL) {
+        const match = await tx.match.findUnique({ where: { id: event.matchId } });
+        if (match) {
+          const field = event.isOwn ? "homeScore" : "awayScore";
+          const current = (event.isOwn ? match.homeScore : match.awayScore) ?? 0;
+          await tx.match.update({
+            where: { id: event.matchId },
+            data: { [field]: Math.max(0, current - 1) },
+          });
+        }
+      }
+    });
+
+    revalidateLive();
+    revalidatePath("/admin/partidos");
+    return { success: "Incidencia eliminada." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ── Registrar sustitución ──────────────────────────────────────────────────
+// Crea el evento CAMBIO y actualiza isTitular: Sale → false, Entra → true.
+export async function addSubstitutionAction(
+  matchId: string,
+  playerOutId: string,
+  playerInId: string,
+  minute: number | null
+): Promise<{ error?: string; success?: string }> {
+  try {
+    await requireAdmin();
+    await requireInProgress(matchId);
+
+    if (!playerOutId || !playerInId) {
+      return { error: "Seleccioná las dos jugadoras del cambio." };
+    }
+    if (playerOutId === playerInId) {
+      return { error: "Las jugadoras del cambio deben ser distintas." };
+    }
+
+    await prisma.$transaction([
+      // Evento CAMBIO en el log de incidencias
+      prisma.matchEvent.create({
+        data: {
+          matchId,
+          type:      EventType.CAMBIO,
+          isOwn:     true,
+          playerId:  playerOutId,  // Sale
+          player2Id: playerInId,   // Entra
+          minute,
+        },
+      }),
+      // Sale → deja de ser titular
+      prisma.playerMatch.upsert({
+        where:  { userId_matchId: { userId: playerOutId, matchId } },
+        update: { isTitular: false },
+        create: { userId: playerOutId, matchId, isTitular: false },
+      }),
+      // Entra → pasa a ser titular
+      prisma.playerMatch.upsert({
+        where:  { userId_matchId: { userId: playerInId, matchId } },
+        update: { isTitular: true },
+        create: { userId: playerInId, matchId, isTitular: true },
+      }),
+    ]);
+
+    revalidateLive();
+    return { success: "Cambio registrado." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 // ── Finalizar partido ──────────────────────────────────────────────────────
 // Calcula el resultado automáticamente a partir del marcador actual.
 export async function finishMatchAction(
@@ -341,7 +436,7 @@ export async function finishMatchAction(
     await prisma.match.update({
       where: { id: matchId },
       data: {
-        status: MatchStatus.FINISHED,
+        status:    MatchStatus.FINISHED,
         result,
         homeScore: home,
         awayScore: away,

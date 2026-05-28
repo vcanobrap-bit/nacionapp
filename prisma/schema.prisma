@@ -42,6 +42,7 @@ enum EventType {
   GOAL     // Gol
   AMARILLA // Tarjeta amarilla
   ROJA     // Tarjeta roja
+  CAMBIO   // Sustitución
 }
 
 // ─────────────────────────────────────────────
@@ -66,7 +67,9 @@ model User {
   createdMatches Match[] @relation("CreatedBy")
 
   /// Incidencias de partido donde esta jugadora fue protagonista
-  matchEvents MatchEvent[] @relation("MatchEvents")
+  matchEvents  MatchEvent[] @relation("MatchEvents")
+  /// Incidencias donde esta jugadora entra (sustituciones)
+  matchEvents2 MatchEvent[] @relation("MatchEvents2")
 
   @@map("users")
 }
@@ -149,13 +152,16 @@ model MatchEvent {
   type      EventType
   /// true = nuestro equipo, false = rival (solo relevante para GOAL)
   isOwn     Boolean   @default(true)
-  /// Jugadora involucrada (solo para eventos de nuestro equipo)
+  /// Jugadora principal: autora del gol/tarjeta; o la que Sale en un CAMBIO
   playerId  String?
+  /// Solo para CAMBIO: la jugadora que Entra
+  player2Id String?
   minute    Int?
   createdAt DateTime  @default(now())
 
-  match  Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  player User? @relation("MatchEvents", fields: [playerId], references: [id], onDelete: SetNull)
+  match   Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player  User? @relation("MatchEvents",  fields: [playerId],  references: [id], onDelete: SetNull)
+  player2 User? @relation("MatchEvents2", fields: [player2Id], references: [id], onDelete: SetNull)
 
   @@map("match_events")
 }
