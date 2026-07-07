@@ -10,15 +10,17 @@ interface Props {
 // ── Helpers ────────────────────────────────────────────────────
 function calcAge(date: Date): number {
   const today = new Date();
-  let age = today.getFullYear() - date.getFullYear();
-  const m = today.getMonth() - date.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < date.getDate())) age--;
+  let age = today.getFullYear() - date.getUTCFullYear();
+  const m = today.getMonth() - date.getUTCMonth();
+  if (m < 0 || (m === 0 && today.getDate() < date.getUTCDate())) age--;
   return age;
 }
 
 function formatDate(date: Date): string {
+  // La fecha de nacimiento se guarda como medianoche UTC: formatear en UTC
+  // para que no se corra un día según la zona horaria del servidor.
   return date.toLocaleDateString("es-AR", {
-    day: "numeric", month: "long", year: "numeric",
+    day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
   });
 }
 
