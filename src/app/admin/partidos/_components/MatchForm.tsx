@@ -25,6 +25,7 @@ const STATUS_OPTIONS: { value: MatchStatus; label: string }[] = [
   { value: "PENDING",     label: "Por jugar"  },
   { value: "IN_PROGRESS", label: "En curso"   },
   { value: "FINISHED",    label: "Finalizado" },
+  { value: "POSTPONED",   label: "Reagendado" },
 ];
 
 const RESULT_OPTIONS: { value: MatchResult | ""; label: string }[] = [
