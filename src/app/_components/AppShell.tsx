@@ -9,18 +9,20 @@ import MatchModal from "./admin/MatchModal";
 import PlayerModal from "./admin/PlayerModal";
 import AddAdminModal from "./admin/AddAdminModal";
 import LiveMatchCard from "./LiveMatchCard";
-import type { MatchData, PlayerData, StatsData, OncePlayer, TournamentData, LiveMatchData } from "../page";
+import type { MatchData, PlayerData, StatsData, OncePlayer, TournamentData, LiveMatchData, MatchEventData } from "../page";
 
 // ── Types ─────────────────────────────────────────────────
 type Tab = "posiciones" | "partidos" | "plantel";
 
 // ── Helpers ───────────────────────────────────────────────
 function calcAge(iso: string): number {
+  // La fecha de nacimiento se guarda como medianoche UTC: leerla con getters UTC
+  // para no correrla un día en zonas horarias negativas (ej. UTC-3).
   const birth = new Date(iso);
   const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = today.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  let age = today.getFullYear() - birth.getUTCFullYear();
+  const m = today.getMonth() - birth.getUTCMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getUTCDate())) age--;
   return age;
 }
 
@@ -31,15 +33,18 @@ function formatDate(iso: string, opts?: Intl.DateTimeFormatOptions): string {
 }
 
 function formatBirthdate(iso: string): string {
+  // Formatear en UTC: la fecha se guarda como medianoche UTC y en zonas UTC-x
+  // el formato local mostraría el día anterior.
   return new Date(iso).toLocaleDateString("es-AR", {
-    day: "numeric", month: "long", year: "numeric",
+    day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
   });
 }
 
 // Computa StatsData desde un subset de matches (uso client-side)
 function computeStatsFromMatches(matches: MatchData[]): StatsData {
   const finished = matches.filter((m) => m.status === "FINISHED");
-  const pending  = matches.filter((m) => m.status === "PENDING");
+  // POSTPONED (reagendado) sigue siendo un partido por jugar a efectos de puntos
+  const pending  = matches.filter((m) => m.status === "PENDING" || m.status === "POSTPONED");
   const live     = matches.filter((m) => m.status === "IN_PROGRESS");
 
   const v  = finished.filter((m) => m.result === "WIN").length;
@@ -155,11 +160,19 @@ export default function AppShell({
     ? computeStatsFromMatches(filteredMatches)
     : stats;
 
-  // Próximo partido en el subset filtrado
+  // Próximo partido en el subset filtrado.
+  // Los reagendados (POSTPONED) no cuentan: no tienen fecha confirmada.
+  // Se prioriza el partido pendiente más próximo desde hoy; si todos los
+  // pendientes tienen fecha pasada, se muestra el más reciente igual.
+  const pendingSorted = filteredMatches
+    .filter((m) => m.status === "PENDING")
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
   const nextMatch =
-    filteredMatches
-      .filter((m) => m.status === "PENDING")
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0] ?? null;
+    pendingSorted.find((m) => new Date(m.date).getTime() >= todayStart.getTime()) ??
+    pendingSorted[0] ??
+    null;
 
   // Hay partido en vivo en el subset?
   const hasLive = filteredMatches.some((m) => m.status === "IN_PROGRESS");
@@ -534,7 +547,8 @@ function MiniStat({
 const STATUS_PRIORITY: Record<string, number> = {
   IN_PROGRESS: 0,
   PENDING: 1,
-  FINISHED: 2,
+  POSTPONED: 2,
+  FINISHED: 3,
 };
 
 function sortGroup(ms: MatchData[]): MatchData[] {
@@ -641,12 +655,13 @@ function PartidosTab({
         })()
       ) : (
         (() => {
-          const live     = matches.filter((m) => m.status === "IN_PROGRESS");
-          const pending  = [...matches.filter((m) => m.status === "PENDING")]
+          const live      = matches.filter((m) => m.status === "IN_PROGRESS");
+          const pending   = [...matches.filter((m) => m.status === "PENDING")]
             .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-          const finished = [...matches.filter((m) => m.status === "FINISHED")]
+          const postponed = matches.filter((m) => m.status === "POSTPONED");
+          const finished  = [...matches.filter((m) => m.status === "FINISHED")]
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          const sorted = [...live, ...pending, ...finished];
+          const sorted = [...live, ...pending, ...postponed, ...finished];
 
           return (
             <div className="space-y-3">
@@ -682,12 +697,14 @@ function MatchCard({
     IN_PROGRESS: "bg-emerald-500/10 border-emerald-500/20 text-emerald-300",
     PENDING:     "bg-white/5        border-white/10        text-slate-400",
     FINISHED:    "bg-blue-500/10    border-blue-500/20     text-blue-300",
+    POSTPONED:   "bg-amber-500/10   border-amber-500/20    text-amber-300",
   }[match.status];
 
   const statusLabel = {
     IN_PROGRESS: "En juego",
     PENDING:     "Pendiente",
     FINISHED:    "Finalizado",
+    POSTPONED:   "Reagendado",
   }[match.status];
 
   const resultBadge = match.result
@@ -764,7 +781,11 @@ function MatchCard({
               Fecha {match.fixtureRoundNumber} ·{" "}
             </span>
           )}
-          {formatDate(match.date, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+          {match.status === "POSTPONED" ? (
+            <span className="text-amber-400/80">Nueva fecha a confirmar</span>
+          ) : (
+            formatDate(match.date, { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+          )}
           {match.venue && (
             <>
               <br />
@@ -772,6 +793,16 @@ function MatchCard({
             </>
           )}
         </p>
+
+        {/* Bitácora de incidencias — goles, tarjetas y cambios */}
+        {(isFinished || isLive) && match.events.length > 0 && (
+          <div className="mt-4 border-t border-white/[0.06] pt-4">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-600 mb-3">
+              📋 Bitácora del partido
+            </p>
+            <BitacoraList events={match.events} opponent={match.opponent} />
+          </div>
+        )}
 
         {match.once.length > 0 && (
           <div className="mt-4 border-t border-white/[0.06] pt-4">
@@ -793,6 +824,47 @@ function MatchCard({
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// Bitácora de incidencias del partido (solo lectura, para partidos jugados)
+function BitacoraList({ events, opponent }: { events: MatchEventData[]; opponent: string }) {
+  return (
+    <div className="space-y-1.5">
+      {events.map((ev) => (
+        <div key={ev.id} className="flex items-center gap-2.5 text-sm">
+          <span className="shrink-0">
+            {ev.type === "GOAL" ? "⚽" : ev.type === "AMARILLA" ? "🟨" : ev.type === "ROJA" ? "🟥" : "🔄"}
+          </span>
+
+          {ev.minute != null && (
+            <span className="text-[11px] font-bold text-slate-500 w-8 text-right shrink-0">
+              {ev.minute}&apos;
+            </span>
+          )}
+
+          {ev.type === "CAMBIO" ? (
+            <span className="text-slate-300 font-medium leading-tight flex-1 min-w-0 text-xs">
+              Sale: <span className="text-white">{ev.playerName ?? "?"}</span>
+              {" — "}Entra: <span className="text-emerald-300">{ev.player2Name ?? "?"}</span>
+            </span>
+          ) : (
+            <span className={`flex-1 min-w-0 text-xs ${ev.isOwn ? "text-white" : "text-slate-400"} font-medium leading-tight`}>
+              {ev.type === "GOAL"
+                ? ev.isOwn
+                  ? ev.playerName ?? "Sin asignar"
+                  : opponent
+                : ev.playerName ?? "Sin asignar"}
+              {ev.type !== "GOAL" && (
+                <span className="text-slate-600 ml-1">
+                  {ev.type === "AMARILLA" ? "amarilla" : "roja"}
+                </span>
+              )}
+            </span>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
