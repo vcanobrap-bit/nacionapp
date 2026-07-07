@@ -8,6 +8,7 @@ const STATUS_CONFIG = {
   PENDING:     { label: "Por jugar",  color: "text-slate-400  bg-white/5      border-white/10"        },
   IN_PROGRESS: { label: "En curso",   color: "text-emerald-300 bg-emerald-500/10 border-emerald-500/20" },
   FINISHED:    { label: "Finalizado", color: "text-blue-300   bg-blue-500/10  border-blue-500/20"     },
+  POSTPONED:   { label: "Reagendado", color: "text-amber-300  bg-amber-500/10 border-amber-500/20"    },
 };
 
 const RESULT_LABEL = { WIN: "Victoria", LOSS: "Derrota", DRAW: "Empate" };
