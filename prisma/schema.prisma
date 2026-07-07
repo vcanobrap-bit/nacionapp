@@ -23,6 +23,7 @@ enum MatchStatus {
   PENDING      // Por jugar
   IN_PROGRESS  // En curso (partido en vivo)
   FINISHED     // Finalizado
+  POSTPONED    // Reagendado (sin fecha confirmada)
 }
 
 enum MatchResult {
