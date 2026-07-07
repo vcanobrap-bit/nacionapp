@@ -1,233 +1,348 @@
 import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import Image from "next/image";
+import { auth } from "@/auth";
+import AppShell from "./_components/AppShell";
 
-interface Props {
-  params: Promise<{ id: string }>;
+// Siempre server-rendered para datos frescos de Supabase
+export const dynamic = "force-dynamic";
+
+// ── Data types (serializable, sin objetos Date) ───────────────
+export interface TournamentData {
+  id: string;
+  name: string;
+  year: number;
+  isActive: boolean;
 }
 
-// ── Helpers ────────────────────────────────────────────────────
-function calcAge(date: Date): number {
-  const today = new Date();
-  let age = today.getFullYear() - date.getUTCFullYear();
-  const m = today.getMonth() - date.getUTCMonth();
-  if (m < 0 || (m === 0 && today.getDate() < date.getUTCDate())) age--;
-  return age;
+export interface MatchData {
+  id: string;
+  date: string;        // ISO string
+  opponent: string;
+  venue: string | null;
+  status: "PENDING" | "IN_PROGRESS" | "FINISHED" | "POSTPONED";
+  result: "WIN" | "LOSS" | "DRAW" | null;
+  homeScore: number | null;
+  awayScore: number | null;
+  once: OncePlayer[];  // Solo isTitular=true (público)
+  events: MatchEventData[]; // Bitácora: goles, tarjetas y cambios
+  // Torneo / fixture
+  tournamentId: string | null;
+  tournamentName: string | null;
+  round: number | null;
+  fixtureRoundNumber: number | null;
+  // Admin-only (undefined para visitantes)
+  notes?: string | null;
+  currentTitularIds?: string[];
 }
 
-function formatDate(date: Date): string {
-  // La fecha de nacimiento se guarda como medianoche UTC: formatear en UTC
-  // para que no se corra un día según la zona horaria del servidor.
-  return date.toLocaleDateString("es-AR", {
-    day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
-  });
+export interface OncePlayer {
+  name: string;
+  number: number | null;
+  position: string | null;
+  avatarUrl: string | null;
 }
 
-// ── Position tokens (dark glass theme) ────────────────────────
-const POSITION_STYLE: Record<string, { label: string; badge: string; accent: string; glow: string }> = {
-  Portera:       { label: "Portera",       badge: "bg-amber-500/10   border-amber-500/20   text-amber-300",   accent: "text-amber-300",   glow: "shadow-amber-500/15"   },
-  Defensora:     { label: "Defensora",     badge: "bg-blue-500/10    border-blue-500/20    text-blue-300",    accent: "text-blue-300",    glow: "shadow-blue-500/15"    },
-  Mediocampista: { label: "Mediocampista", badge: "bg-emerald-500/10 border-emerald-500/20 text-emerald-300", accent: "text-emerald-300", glow: "shadow-emerald-500/15" },
-  Delantera:     { label: "Delantera",     badge: "bg-rose-500/10    border-rose-500/20    text-rose-300",    accent: "text-rose-300",    glow: "shadow-rose-500/15"    },
-};
+export interface PlayerData {
+  id: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl: string | null;
+  birthdate: string | null; // ISO string
+  joiningYear: number | null;
+  idealPosition: string | null;
+  number: number | null;
+  // Admin-only (undefined para visitantes)
+  status?: "AVAILABLE" | "INJURED";
+  adminComments?: string | null;
+}
 
-const POSITION_ICON: Record<string, string> = {
-  Portera: "🧤", Defensora: "🛡️", Mediocampista: "⚙️", Delantera: "⚡",
-};
+export interface MatchEventData {
+  id: string;
+  type: "GOAL" | "AMARILLA" | "ROJA" | "CAMBIO";
+  isOwn: boolean;
+  minute: number | null;
+  playerName: string | null;   // autora del gol/tarjeta; o jugadora que Sale en CAMBIO
+  player2Name: string | null;  // jugadora que Entra en CAMBIO (null para otros tipos)
+}
 
-// ── Metadata ───────────────────────────────────────────────────
-export async function generateMetadata({ params }: Props) {
-  const { id } = await params;
-  const user = await prisma.user.findUnique({
-    where: { id, role: "PLAYER" },
-    include: { profile: true },
-  });
-  if (!user?.profile) return { title: "Jugadora · NacionApp" };
-  const { firstName, lastName } = user.profile;
+export interface LiveMatchConvocada {
+  userId: string;
+  name: string;
+  number: number | null;
+  position: string | null;
+  isTitular: boolean;
+}
+
+export interface LiveMatchData {
+  id: string;
+  opponent: string;
+  venue: string | null;
+  homeScore: number;
+  awayScore: number;
+  tournamentName: string | null;
+  once: OncePlayer[];
+  events: MatchEventData[];
+  // Admin-only
+  convocadas?: LiveMatchConvocada[];
+}
+
+export interface StatsData {
+  pj: number;           // Partidos jugados (FINISHED)
+  v: number;            // Victorias
+  e: number;            // Empates
+  d: number;            // Derrotas
+  gf: number;           // Goles a favor
+  gc: number;           // Goles en contra
+  ptsGanados: number;   // 3×V + 1×E
+  ptsPendientes: number;// PENDING × 3 (escenario ideal)
+  ptsIdeales: number;   // Ganados + Pendientes
+  pendingCount: number;
+  inProgressCount: number;
+}
+
+// ── Helpers ───────────────────────────────────────────────────
+function computeStats(matches: { status: string; result: string | null; homeScore: number | null; awayScore: number | null }[]): StatsData {
+  const finished = matches.filter((m) => m.status === "FINISHED");
+  // POSTPONED (reagendado) sigue siendo un partido por jugar a efectos de puntos
+  const pending  = matches.filter((m) => m.status === "PENDING" || m.status === "POSTPONED");
+  const live     = matches.filter((m) => m.status === "IN_PROGRESS");
+
+  const v  = finished.filter((m) => m.result === "WIN").length;
+  const e  = finished.filter((m) => m.result === "DRAW").length;
+  const d  = finished.filter((m) => m.result === "LOSS").length;
+  const gf = finished.reduce((s, m) => s + (m.homeScore ?? 0), 0);
+  const gc = finished.reduce((s, m) => s + (m.awayScore ?? 0), 0);
+
+  const ptsGanados    = v * 3 + e;
+  const ptsPendientes = pending.length * 3;
+
   return {
-    title: `${firstName} ${lastName} · NacionApp`,
-    description: `Perfil de ${firstName} ${lastName} — Selección Argentina Femenina.`,
+    pj: finished.length,
+    v, e, d, gf, gc,
+    ptsGanados,
+    ptsPendientes,
+    ptsIdeales: ptsGanados + ptsPendientes,
+    pendingCount: pending.length,
+    inProgressCount: live.length,
   };
 }
 
-// ── Page ───────────────────────────────────────────────────────
-export default async function PlayerProfilePage({ params }: Props) {
-  const { id } = await params;
-
-  const [user, pj, titular] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id, role: "PLAYER" },
+// ── Page (Server Component) ───────────────────────────────────
+export default async function HomePage() {
+  const [rawMatches, rawPlayers, rawTournaments] = await Promise.all([
+    prisma.match.findMany({
+      orderBy: { date: "asc" },
+      include: {
+        players: {
+          include: {
+            user: { include: { profile: true } },
+          },
+        },
+        tournament: { select: { name: true } },
+        events: {
+          orderBy: { createdAt: "asc" },
+          include: {
+            player:  { include: { profile: true } },
+            player2: { include: { profile: true } },
+          },
+        },
+      },
+    }),
+    prisma.user.findMany({
+      where: { role: "PLAYER" },
       include: { profile: true },
     }),
-    prisma.playerMatch.count({
-      where: { userId: id, match: { status: "FINISHED" } },
-    }),
-    prisma.playerMatch.count({
-      where: { userId: id, isTitular: true, match: { status: "FINISHED" } },
+    prisma.tournament.findMany({
+      orderBy: [{ year: "desc" }, { name: "asc" }],
     }),
   ]);
 
-  if (!user || !user.profile) notFound();
+  // Serializar matches
+  const matches: MatchData[] = rawMatches.map((m) => {
+    const positionOrder = ["Portera", "Defensora", "Mediocampista", "Delantera"];
+    const once: OncePlayer[] = m.players
+      .filter((pm) => pm.isTitular)
+      .map((pm) => ({
+        name: `${pm.user.profile?.firstName ?? ""} ${pm.user.profile?.lastName ?? ""}`.trim(),
+        number: pm.user.profile?.number ?? null,
+        position: pm.user.profile?.idealPosition ?? null,
+        avatarUrl: pm.user.profile?.avatarUrl ?? null,
+      }))
+      .sort((a, b) => {
+        const ai = positionOrder.indexOf(a.position ?? "");
+        const bi = positionOrder.indexOf(b.position ?? "");
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      });
 
-  const p        = user.profile;
-  const posStyle = POSITION_STYLE[p.idealPosition ?? ""];
-  const posIcon  = POSITION_ICON[p.idealPosition ?? ""] ?? "👟";
-  const age      = p.birthdate ? calcAge(p.birthdate) : null;
+    const events: MatchEventData[] = m.events.map((ev) => ({
+      id:          ev.id,
+      type:        ev.type as MatchEventData["type"],
+      isOwn:       ev.isOwn,
+      minute:      ev.minute,
+      playerName:  ev.player?.profile
+        ? `${ev.player.profile.firstName} ${ev.player.profile.lastName}`.trim()
+        : null,
+      player2Name: ev.player2?.profile
+        ? `${ev.player2.profile.firstName} ${ev.player2.profile.lastName}`.trim()
+        : null,
+    }));
+
+    return {
+      id: m.id,
+      date: m.date.toISOString(),
+      opponent: m.opponent,
+      venue: m.venue,
+      status: m.status as MatchData["status"],
+      result: m.result as MatchData["result"],
+      homeScore: m.homeScore,
+      awayScore: m.awayScore,
+      once,
+      events,
+      tournamentId: m.tournamentId,
+      tournamentName: m.tournament?.name ?? null,
+      round: m.round,
+      fixtureRoundNumber: m.fixtureRoundNumber,
+    };
+  });
+
+  // Serializar jugadoras — ordenar por posición → apellido
+  const positionOrder = ["Portera", "Defensora", "Mediocampista", "Delantera"];
+  const players: PlayerData[] = rawPlayers
+    .map((u) => ({
+      id: u.id,
+      firstName: u.profile?.firstName ?? "",
+      lastName: u.profile?.lastName ?? "",
+      avatarUrl: u.profile?.avatarUrl ?? null,
+      birthdate: u.profile?.birthdate?.toISOString() ?? null,
+      joiningYear: u.profile?.joiningYear ?? null,
+      idealPosition: u.profile?.idealPosition ?? null,
+      number: u.profile?.number ?? null,
+    }))
+    .sort((a, b) => {
+      const ai = positionOrder.indexOf(a.idealPosition ?? "");
+      const bi = positionOrder.indexOf(b.idealPosition ?? "");
+      if (ai !== bi) return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      return a.lastName.localeCompare(b.lastName);
+    });
+
+  // Serializar torneos
+  const tournaments: TournamentData[] = rawTournaments.map((t) => ({
+    id: t.id,
+    name: t.name,
+    year: t.year,
+    isActive: t.isActive,
+  }));
+
+  const stats = computeStats(rawMatches);
+
+  const session = await auth();
+  const isAdmin = session?.user?.role === "ADMIN";
+  const adminEmail = session?.user?.email ?? null;
+
+  // Enriquecer datos con campos privados cuando es admin
+  // matches[i] corresponde a rawMatches[i] (mismo orden, sin sort posterior)
+  const adminMatches: MatchData[] = isAdmin
+    ? rawMatches.map((m, i) => ({
+        ...matches[i],
+        notes: m.notes ?? null,
+        currentTitularIds: m.players
+          .filter((pm) => pm.isTitular)
+          .map((pm) => pm.userId),
+      }))
+    : matches;
+
+  // rawPlayers puede estar en orden diferente a players (que está sorted),
+  // así que reconstruimos desde cero para admin.
+  const adminPlayers: PlayerData[] = isAdmin
+    ? rawPlayers
+        .map((u) => ({
+          id: u.id,
+          firstName: u.profile?.firstName ?? "",
+          lastName: u.profile?.lastName ?? "",
+          avatarUrl: u.profile?.avatarUrl ?? null,
+          birthdate: u.profile?.birthdate?.toISOString() ?? null,
+          joiningYear: u.profile?.joiningYear ?? null,
+          idealPosition: u.profile?.idealPosition ?? null,
+          number: u.profile?.number ?? null,
+          status: (u.profile?.status ?? "AVAILABLE") as "AVAILABLE" | "INJURED",
+          adminComments: u.profile?.adminComments ?? null,
+        }))
+        .sort((a, b) => {
+          const ai = positionOrder.indexOf(a.idealPosition ?? "");
+          const bi = positionOrder.indexOf(b.idealPosition ?? "");
+          if (ai !== bi) return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+          return a.lastName.localeCompare(b.lastName);
+        })
+    : players;
+
+  // ── Partido en vivo con eventos ────────────────────────────────
+  const rawLive = rawMatches.find((m) => m.status === "IN_PROGRESS") ?? null;
+
+  const liveMatch: LiveMatchData | null = rawLive
+    ? {
+        id: rawLive.id,
+        opponent: rawLive.opponent,
+        venue: rawLive.venue,
+        homeScore: rawLive.homeScore ?? 0,
+        awayScore: rawLive.awayScore ?? 0,
+        tournamentName: rawLive.tournament?.name ?? null,
+        once: rawLive.players
+          .filter((pm) => pm.isTitular)
+          .map((pm) => ({
+            name: `${pm.user.profile?.firstName ?? ""} ${pm.user.profile?.lastName ?? ""}`.trim(),
+            number: pm.user.profile?.number ?? null,
+            position: pm.user.profile?.idealPosition ?? null,
+            avatarUrl: pm.user.profile?.avatarUrl ?? null,
+          }))
+          .sort((a, b) => {
+            const ai = positionOrder.indexOf(a.position ?? "");
+            const bi = positionOrder.indexOf(b.position ?? "");
+            return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+          }),
+        events: rawLive.events.map((ev) => ({
+          id:          ev.id,
+          type:        ev.type as MatchEventData["type"],
+          isOwn:       ev.isOwn,
+          minute:      ev.minute,
+          playerName:  ev.player?.profile
+            ? `${ev.player.profile.firstName} ${ev.player.profile.lastName}`.trim()
+            : null,
+          player2Name: ev.player2?.profile
+            ? `${ev.player2.profile.firstName} ${ev.player2.profile.lastName}`.trim()
+            : null,
+        })),
+        // Admin: lista para los botones de acción — todo el plantel inscrito,
+        // marcando quiénes son titulares en este partido (para Sale/Entra en cambios)
+        convocadas: isAdmin
+          ? (() => {
+              const titularIds = new Set(
+                rawLive.players.filter((pm) => pm.isTitular).map((pm) => pm.userId)
+              );
+              return rawPlayers.map((u) => ({
+                userId:    u.id,
+                name:      `${u.profile?.firstName ?? ""} ${u.profile?.lastName ?? ""}`.trim(),
+                number:    u.profile?.number ?? null,
+                position:  u.profile?.idealPosition ?? null,
+                isTitular: titularIds.has(u.id),
+              }));
+            })()
+              .sort((a, b) => {
+                const ai = positionOrder.indexOf(a.position ?? "");
+                const bi = positionOrder.indexOf(b.position ?? "");
+                if (ai !== bi) return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+                return a.name.localeCompare(b.name);
+              })
+          : undefined,
+      }
+    : null;
 
   return (
-    <div className="min-h-screen bg-[#020617] text-white flex flex-col">
-
-      {/* ── Top bar ───────────────────────────────────────── */}
-      <header className="sticky top-0 z-20 bg-[#020617]/80 backdrop-blur-xl border-b border-white/[0.06]">
-        <div className="max-w-xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
-              <path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Plantel
-          </Link>
-
-          <Image
-            src="/img/logo.svg"
-            alt="Selección Argentina Femenina"
-            width={30}
-            height={36}
-            className="opacity-90"
-          />
-        </div>
-      </header>
-
-      {/* ── Hero ──────────────────────────────────────────── */}
-      <section className="max-w-xl mx-auto w-full px-4 pt-10 pb-8 flex flex-col items-center text-center">
-
-        {/* Avatar con glow de posición */}
-        <div
-          className={`w-28 h-28 rounded-full bg-white/5 border border-white/10 overflow-hidden flex items-center justify-center mb-5 shadow-2xl ${posStyle?.glow ?? ""}`}
-        >
-          {p.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={p.avatarUrl}
-              alt={`${p.firstName} ${p.lastName}`}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <span className="text-5xl">{posIcon}</span>
-          )}
-        </div>
-
-        {/* Número */}
-        {p.number != null && (
-          <p className={`text-sm font-bold tracking-widest mb-1 ${posStyle?.accent ?? "text-blue-400"}`}>
-            #{p.number}
-          </p>
-        )}
-
-        {/* Nombre */}
-        <h1 className="text-3xl font-semibold tracking-tight leading-tight">
-          {p.firstName}
-          <br />
-          {p.lastName}
-        </h1>
-
-        {/* Position badge */}
-        {p.idealPosition && (
-          <span className={`mt-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border ${posStyle?.badge ?? "bg-white/5 border-white/10 text-slate-400"}`}>
-            <span>{posIcon}</span>
-            {p.idealPosition}
-          </span>
-        )}
-      </section>
-
-      {/* ── Info cards ────────────────────────────────────── */}
-      <section className="max-w-xl mx-auto w-full px-4 pb-8 space-y-3">
-
-        {/* Birthdate + Age */}
-        {p.birthdate && (
-          <InfoRow icon="🎂" label="Cumpleaños">
-            {formatDate(p.birthdate)}
-            {age != null && (
-              <span className="text-slate-600 ml-2">({age} años)</span>
-            )}
-          </InfoRow>
-        )}
-
-        {/* Joining year */}
-        {p.joiningYear && (
-          <InfoRow icon="🗓️" label="En la Selección">
-            Desde {p.joiningYear}
-            <span className="text-slate-600 ml-2">
-              ({new Date().getFullYear() - p.joiningYear} temporadas)
-            </span>
-          </InfoRow>
-        )}
-
-        {/* Nationality */}
-        {p.nationality && (
-          <InfoRow icon="🌍" label="Nacionalidad">
-            {p.nationality}
-          </InfoRow>
-        )}
-
-        {/* Stats row */}
-        {pj > 0 && (
-          <div className="grid grid-cols-2 gap-3 pt-1">
-            <StatCard value={pj}     label="Partidos jugados" accent={posStyle?.accent ?? "text-blue-300"} />
-            <StatCard value={titular} label="Veces titular"   accent={posStyle?.accent ?? "text-blue-300"} />
-          </div>
-        )}
-
-        {/* Bio */}
-        {p.bio && (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 mt-2">
-            <p className="text-xs uppercase tracking-widest text-slate-600 font-semibold mb-2">
-              Sobre ella
-            </p>
-            <p className="text-sm text-slate-300 leading-relaxed">{p.bio}</p>
-          </div>
-        )}
-      </section>
-
-      {/* ── Footer ────────────────────────────────────────── */}
-      <footer className="mt-auto border-t border-white/[0.06] py-6 text-center">
-        <p className="text-xs text-slate-700">
-          © {new Date().getFullYear()} NacionApp · Equipo Nacional Femenino - 🔴🔵
-        </p>
-      </footer>
-    </div>
-  );
-}
-
-// ── Sub-components ─────────────────────────────────────────────
-function InfoRow({
-  icon, label, children,
-}: {
-  icon: string; label: string; children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start gap-4 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3.5">
-      <span className="text-lg leading-none pt-0.5 shrink-0">{icon}</span>
-      <div>
-        <p className="text-xs text-slate-500 font-medium mb-0.5">{label}</p>
-        <p className="text-sm font-semibold text-white">{children}</p>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({
-  value, label, accent,
-}: {
-  value: number; label: string; accent: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 text-center">
-      <p className={`text-3xl font-semibold ${accent}`}>{value}</p>
-      <p className="text-xs text-slate-500 font-medium mt-1 leading-tight">{label}</p>
-    </div>
+    <AppShell
+      matches={adminMatches}
+      players={adminPlayers}
+      stats={stats}
+      tournaments={tournaments}
+      adminEmail={adminEmail}
+      liveMatch={liveMatch}
+    />
   );
 }
