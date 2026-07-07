@@ -20,7 +20,7 @@ function toDatetimeLocal(iso: string | null | undefined): string {
   return new Date(iso).toISOString().slice(0, 16);
 }
 
-type MatchStatus = "PENDING" | "IN_PROGRESS" | "FINISHED";
+type MatchStatus = "PENDING" | "IN_PROGRESS" | "FINISHED" | "POSTPONED";
 type Tab = "partido" | "once";
 
 const POSITION_ORDER = ["Portera", "Defensora", "Mediocampista", "Delantera"];
@@ -132,7 +132,14 @@ function PartidoForm({
             <option value="PENDING">Por jugar</option>
             <option value="IN_PROGRESS">En curso</option>
             <option value="FINISHED">Finalizado</option>
+            <option value="POSTPONED">Reagendado</option>
           </select>
+          {status === "POSTPONED" && (
+            <p className="text-[10px] text-amber-400/70 mt-1.5 leading-snug">
+              El partido no se mostrará como próximo hasta que le asignes
+              una nueva fecha y lo vuelvas a &quot;Por jugar&quot;.
+            </p>
+          )}
         </div>
       </div>
 
