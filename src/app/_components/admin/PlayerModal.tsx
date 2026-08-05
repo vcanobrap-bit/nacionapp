@@ -269,11 +269,6 @@ function EditForm({
               placeholder="https://..."
             />
           </div>
-          <F
-            label="Nacionalidad"
-            name="nationality"
-            defaultValue="Argentina"
-          />
         </div>
       </div>
 

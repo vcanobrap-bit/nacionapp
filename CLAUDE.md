@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # NacionApp — Contexto del proyecto
 
-**Selección Argentina Femenina de Fútbol** — app de gestión del plantel, partidos y estadísticas.
+**Nacional Femenino** — app de gestión del plantel, partidos y estadísticas.
 
 ## Stack exacto (no asumir versiones antiguas)
 
@@ -39,7 +39,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 User         → id, email, password, role (ADMIN | PLAYER)
 Profile      → firstName, lastName, avatarUrl, birthdate, joiningYear, idealPosition,
-               number, nationality, bio [PÚBLICO]
+               number, bio [PÚBLICO]
                status (AVAILABLE | INJURED), adminComments [PRIVADO/ADMIN]
 Tournament   → name, year, isActive — campeonatos; FK SetNull en Match al borrar
 Match        → date, opponent, venue, status (PENDING | IN_PROGRESS | FINISHED),

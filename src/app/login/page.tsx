@@ -35,7 +35,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <div className="flex flex-col items-center mb-8">
           <Image
             src="/img/logo.svg"
-            alt="Selección Argentina Femenina"
+            alt="Nacional Femenino"
             width={52}
             height={62}
             className="mb-5 drop-shadow-lg"

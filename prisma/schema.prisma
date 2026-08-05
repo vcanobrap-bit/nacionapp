@@ -87,7 +87,6 @@ model Profile {
   joiningYear  Int?         // Año en que se incorporó a la selección
   idealPosition String?     // ej. "Delantera", "Mediocampista", "Defensora", "Portera"
   number       Int?         // Número de camiseta
-  nationality  String?      @default("Argentina")
   bio          String?      // Descripción pública breve
 
   // ── Campos privados (solo admin) ────────────

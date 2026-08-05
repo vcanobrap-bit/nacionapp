@@ -56,7 +56,6 @@ export default function PlayerForm({
           <Field label="Número de camiseta" name="number" type="number" defaultValue={profile?.number?.toString()} min="1" max="99" />
           <Field label="Fecha de nacimiento" name="birthdate" type="date" defaultValue={toDateInput(profile?.birthdate)} />
           <Field label="Año de incorporación" name="joiningYear" type="number" defaultValue={profile?.joiningYear?.toString()} min="2000" max="2030" />
-          <Field label="Nacionalidad" name="nationality" defaultValue={profile?.nationality ?? "Argentina"} />
           <Field label="URL de foto (avatar)" name="avatarUrl" type="url" defaultValue={profile?.avatarUrl ?? ""} placeholder="https://..." />
         </div>
         <div className="mt-4">

@@ -9,8 +9,8 @@ const montserrat = Montserrat({
 });
 
 export const metadata: Metadata = {
-  title: "NacionApp · Selección Argentina Femenina",
-  description: "Seguí los partidos, el plantel y las estadísticas de la Selección Argentina Femenina.",
+  title: "NacionApp · Nacional Femenino",
+  description: "Seguí los partidos, el plantel y las estadísticas del Nacional Femenino.",
 };
 
 export default function RootLayout({

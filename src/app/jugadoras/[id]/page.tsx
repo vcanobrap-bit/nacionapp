@@ -47,7 +47,7 @@ export async function generateMetadata({ params }: Props) {
   const { firstName, lastName } = user.profile;
   return {
     title: `${firstName} ${lastName} · NacionApp`,
-    description: `Perfil de ${firstName} ${lastName} — Selección Argentina Femenina.`,
+    description: `Perfil de ${firstName} ${lastName} — Nacional Femenino.`,
   };
 }
 
@@ -93,7 +93,7 @@ export default async function PlayerProfilePage({ params }: Props) {
 
           <Image
             src="/img/logo.svg"
-            alt="Selección Argentina Femenina"
+            alt="Nacional Femenino"
             width={30}
             height={36}
             className="opacity-90"
@@ -163,13 +163,6 @@ export default async function PlayerProfilePage({ params }: Props) {
             <span className="text-slate-600 ml-2">
               ({new Date().getFullYear() - p.joiningYear} temporadas)
             </span>
-          </InfoRow>
-        )}
-
-        {/* Nationality */}
-        {p.nationality && (
-          <InfoRow icon="🌍" label="Nacionalidad">
-            {p.nationality}
           </InfoRow>
         )}
 

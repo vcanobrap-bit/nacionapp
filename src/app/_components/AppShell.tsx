@@ -192,7 +192,7 @@ export default function AppShell({
             <div className="flex items-center gap-3 min-w-0">
               <Image
                 src="/img/logo.svg"
-                alt="Selección Argentina Femenina"
+                alt="Nacional Femenino"
                 width={32}
                 height={38}
                 className="shrink-0 drop-shadow-lg"
