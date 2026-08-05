@@ -183,34 +183,52 @@ export default function AppShell({
       {/* WebGL dot-matrix background */}
       <WebGLBackground />
 
-      {/* ── Header ──────────────────────────────────────── */}
-      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[#020617]/80 backdrop-blur-xl">
-        <div className="max-w-xl mx-auto px-4 pt-4 pb-3">
+      {/* ── Hero — foto del plantel ─────────────────────── */}
+      <section className="relative z-10 w-full overflow-hidden isolate">
+        {/* Foto de fondo + wash azul del club */}
+        <div className="absolute inset-0">
+          <Image
+            src="/img/team-hero.jpg"
+            alt="Plantel de Nacional Femenino"
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover"
+            style={{ objectPosition: "50% 38%" }}
+          />
+          {/* Tinte azul institucional */}
+          <div className="absolute inset-0 bg-[#0b1e4d]/35" />
+          {/* Viñeta: oscura arriba y abajo, translúcida en el medio (caras
+              visibles); abajo se funde con el fondo de la app */}
+          <div className="absolute inset-0 bg-gradient-to-b from-[#020617]/80 via-transparent to-[#020617]" />
+        </div>
 
-          {/* Brand row */}
-          <div className="flex items-center justify-between mb-4">
+        {/* Contenido — marca + controles, anclados abajo */}
+        <div className="relative z-10 max-w-xl mx-auto w-full px-4 flex flex-col justify-end h-[280px] sm:h-[350px] md:h-[400px] pb-4">
+          <div className="flex items-end justify-between gap-3">
+            {/* Marca */}
             <div className="flex items-center gap-3 min-w-0">
               <Image
                 src="/img/logo.svg"
                 alt="Nacional Femenino"
-                width={32}
-                height={38}
-                className="shrink-0 drop-shadow-lg"
+                width={52}
+                height={62}
+                className="shrink-0 drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)]"
               />
               <div className="min-w-0">
-                <h1 className="text-sm font-semibold text-white leading-none tracking-tight">
+                <h1 className="text-2xl font-bold text-white leading-none tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]">
                   NacionApp
                 </h1>
-                <p className="text-[10px] text-slate-500 font-medium tracking-wider uppercase mt-0.5">
-                  Equipo Nacional - Femenino - 🔴🔵
+                <p className="text-[11px] text-slate-200/90 font-semibold tracking-widest uppercase mt-1.5 drop-shadow-[0_1px_6px_rgba(0,0,0,0.95)]">
+                  Equipo Nacional · Femenino 🔴🔵
                 </p>
               </div>
             </div>
 
-            {/* Right: live badge + admin indicator */}
+            {/* Controles: en vivo + admin */}
             <div className="flex items-center gap-2 shrink-0">
               {hasLiveGlobal && (
-                <div className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-semibold px-3 py-1.5 rounded-full">
+                <div className="inline-flex items-center gap-1.5 bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 text-xs font-semibold px-3 py-1.5 rounded-full backdrop-blur-md">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   En vivo
                 </div>
@@ -218,8 +236,12 @@ export default function AppShell({
               <AdminBar adminEmail={adminEmail} />
             </div>
           </div>
+        </div>
+      </section>
 
-          {/* Tab pills */}
+      {/* ── Tabs (sticky) ───────────────────────────────── */}
+      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[#020617]/85 backdrop-blur-xl">
+        <div className="max-w-xl mx-auto px-4 py-3">
           <div className="flex p-1 gap-0.5 bg-white/[0.04] rounded-full border border-white/[0.06]">
             {tabs.map((t) => (
               <button
