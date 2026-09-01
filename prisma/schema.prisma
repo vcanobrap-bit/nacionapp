@@ -108,9 +108,45 @@ model Tournament {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  matches Match[]
+  matches   Match[]
+  standings StandingsSnapshot[]
 
   @@map("tournaments")
+}
+
+/// Tabla de posiciones OFICIAL de la asociación, transcrita a mano desde el
+/// pantallazo que publica cada ciertas semanas. No se actualiza en vivo.
+/// Cada carga es un snapshot completo; la app muestra el más reciente por
+/// torneo. Se guarda el historial: permite mostrar movimientos de posición
+/// entre publicaciones más adelante.
+model StandingsSnapshot {
+  id           String   @id @default(cuid())
+  tournamentId String
+  /// Fecha de la tabla según la asociación (NO cuándo se cargó en la app).
+  /// Es lo que se muestra en el disclaimer de "actualizada al".
+  asOf         DateTime
+  createdAt    DateTime @default(now())
+
+  tournament Tournament     @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  rows       StandingsRow[]
+
+  @@map("standings_snapshots")
+}
+
+/// Una fila de la tabla. La asociación solo publica nombre y puntos
+/// acumulados: sin PJ, goles ni otra estadística.
+model StandingsRow {
+  id         String @id @default(cuid())
+  snapshotId String
+  /// Orden tal como lo publica la asociación. No se recalcula: la tabla
+  /// oficial puede tener desempates que no conocemos.
+  position   Int
+  teamName   String
+  points     Int
+
+  snapshot StandingsSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@map("standings_rows")
 }
 
 model Match {

@@ -49,6 +49,7 @@ que solo aparecen con sesión ADMIN. Al iniciar sesión se vuelve a `/`.
 | `_components/admin/PlayerModal.tsx` | Crear/editar jugadora (datos públicos y privados) |
 | `_components/admin/TournamentModal.tsx` | Crear campeonatos, activar/desactivar, eliminar |
 | `_components/admin/AddAdminModal.tsx` | Alta de otro usuario administrador |
+| `_components/admin/StandingsModal.tsx` | Transcribir la tabla oficial de la asociación |
 | `_components/LiveMatchCard.tsx` | Consola de partido en vivo: goles, tarjetas, cambios, finalizar |
 
 ## Base de datos — Supabase PostgreSQL
@@ -220,14 +221,34 @@ marcador. El resto (fecha, cancha, bitácora, once inicial) va en el desplegable
 
 ## Puntos — nunca se suman entre torneos
 
-`PosicionesTab` renderiza un bloque `TournamentPoints` **por campeonato**:
-tarjeta principal con los puntos de la rueda actual, tarjeta chica con el total
-del campeonato, y el rendimiento (PJ/V/E/D, GF/GC) de ese campeonato.
-Los puntos de torneos distintos jamás se agregan entre sí.
+`PosicionesTab` renderiza un bloque `TournamentPoints` **por campeonato**, en
+este orden: hero con los puntos de la **rueda actual** → `Rendimiento` de ESA
+rueda (PJ/V/E/D, GF/GC — por rueda, no por torneo) → total del campeonato →
+`RuedasAnteriores` (colapsado, una línea por rueda terminada).
+
+Cuando termina una rueda y empieza la siguiente, `currentRound()` cambia solo:
+el hero pasa a la nueva y la anterior aparece en "Ruedas anteriores". No hay
+nada que "cerrar" a mano. Los puntos de torneos distintos jamás se agregan.
+
+## Tabla oficial de la asociación (pestaña Tabla)
+
+La asociación publica cada ciertas semanas un pantallazo con **solo nombre y
+puntos acumulados** — sin PJ, goles ni nada más. Se transcribe a mano desde
+`StandingsModal` (textarea, una fila por línea: `Equipo 45`) con
+previsualización que usa el **mismo parser** que el servidor
+(`src/lib/standings.ts`), así lo que se ve es lo que se guarda.
+
+- Cada carga es un `StandingsSnapshot` completo con sus `StandingsRow`. No se
+  edita: se guarda historial y la app muestra **el más reciente por torneo**.
+- `position` es el orden en que la asociación publica, **no** se recalcula por
+  puntos: la tabla oficial puede tener desempates que no conocemos.
+- `asOf` es la fecha de la tabla según la asociación (no la de carga). Va en
+  el disclaimer "Actualizada al …", que deja claro que no es en vivo.
+- Nuestra fila se resalta con `isOurTeam()` (contiene "nacional").
 
 ## La pestaña activa vive en la URL
 
-`/` → Posiciones · `/?tab=partidos` · `/?tab=plantel`. `page.tsx` lee `?tab=`
+`/` → Posiciones · `/?tab=tabla` · `/?tab=partidos` · `/?tab=plantel`. `page.tsx` lee `?tab=`
 (validado con `parseTab`) y lo pasa como `initialTab`; el servidor renderiza la
 pestaña correcta de entrada. En el cliente, **cambiar de pestaña va siempre por
 `changeTab()`**, que actualiza el estado y la URL con `history.replaceState`
@@ -240,7 +261,7 @@ no a `/`.
 
 | Ruta | Descripción |
 |---|---|
-| `/` | App completa (3 tabs) + controles de admin inline si hay sesión |
+| `/` | App completa (4 tabs) + controles de admin inline si hay sesión |
 | `/jugadoras/[id]` | Ficha pública de la jugadora |
 | `/login` | Ingreso de administradoras → redirige a `/` |
 
@@ -299,6 +320,8 @@ npm run db:generate  # Regenerar cliente Prisma
 npm run db:seed      # Poblar con datos de ejemplo (tsx prisma/seed.ts)
 npm run db:studio    # Prisma Studio
 npm run lint         # ESLint
+npm run test:clock   # Reglas del reloj (retoma en 30:00, etc.)
+npm run test:standings # Parser de la tabla oficial
 ```
 
 ## Gotchas importantes

@@ -12,7 +12,9 @@ import TournamentModal from "./admin/TournamentModal";
 import LiveMatchCard, { groupEventsByPhase } from "./LiveMatchCard";
 import LiveRefresher from "./LiveRefresher";
 import { PHASE_LABEL } from "@/lib/clock";
-import type { MatchData, PlayerData, StatsData, OncePlayer, TournamentData, LiveMatchData, MatchEventData, Tab } from "../page";
+import type { MatchData, PlayerData, StatsData, OncePlayer, TournamentData, LiveMatchData, MatchEventData, StandingsData, Tab } from "../page";
+import StandingsModal from "./admin/StandingsModal";
+import { isOurTeam, formatAsOf } from "@/lib/standings";
 
 // ── Helpers ───────────────────────────────────────────────
 function calcAge(iso: string): number {
@@ -99,7 +101,7 @@ function PencilIcon() {
 
 // ── Main component ────────────────────────────────────────
 export default function AppShell({
-  initialTab, serverNow, matches, players, tournaments, adminEmail, liveMatch,
+  initialTab, serverNow, matches, players, tournaments, standings, adminEmail, liveMatch,
 }: {
   /** Pestaña con la que se carga, leída de `?tab=` en el servidor. */
   initialTab: Tab;
@@ -108,6 +110,8 @@ export default function AppShell({
   matches: MatchData[];
   players: PlayerData[];
   tournaments: TournamentData[];
+  /** Tabla oficial de la asociación, la más reciente por torneo. */
+  standings: StandingsData[];
   adminEmail: string | null;
   liveMatch: LiveMatchData | null;
 }) {
@@ -178,9 +182,15 @@ export default function AppShell({
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "posiciones", label: "Posiciones" },
+    { id: "tabla",      label: "Tabla"      },
     { id: "partidos",   label: "Partidos"   },
     { id: "plantel",    label: "Plantel"    },
   ];
+
+  // Tablas oficiales filtradas por torneo seleccionado
+  const filteredStandings = selectedTournamentId
+    ? standings.filter((s) => s.tournamentId === selectedTournamentId)
+    : standings;
 
   // Matches filtrados por torneo seleccionado
   const filteredMatches = selectedTournamentId
@@ -345,6 +355,14 @@ export default function AppShell({
             onAddMatch={openNewMatch}
             onEditMatch={openEditMatch}
             onCompleteOnce={openCompleteOnce}
+          />
+        )}
+        {tab === "tabla" && (
+          <TablaTab
+            standings={filteredStandings}
+            allStandings={standings}
+            tournaments={tournaments}
+            isAdmin={isAdmin}
           />
         )}
         {tab === "plantel" && (
@@ -674,17 +692,28 @@ function PosicionesTab({
   );
 }
 
-/** Puntos de un campeonato: la rueda actual arriba, el total del torneo abajo. */
+/**
+ * Puntos de un campeonato. Orden: rueda actual (hero) → rendimiento de ESA
+ * rueda → total del campeonato → ruedas anteriores (colapsado).
+ *
+ * El rendimiento es por rueda, no por torneo: es lo que se está disputando.
+ * Cuando termina una rueda y empieza la siguiente, `currentRound` cambia solo
+ * y el hero pasa a mostrar la nueva; la anterior queda registrada en
+ * "Ruedas anteriores", sin estorbar.
+ */
 function TournamentPoints({ group }: { group: TournamentGroup }) {
   const round = currentRound(group.rounds);
   const roundStats = round ? computeStatsFromMatches(round.matches) : null;
   const totalStats = computeStatsFromMatches(group.matches);
-  const dif = totalStats.gf - totalStats.gc;
 
   const pct =
     roundStats && roundStats.ptsIdeales > 0
       ? Math.round((roundStats.ptsGanados / roundStats.ptsIdeales) * 100)
       : 0;
+
+  const ruedasAnteriores = group.rounds.filter(
+    (r) => r.state === "finished" && r !== round
+  );
 
   return (
     <div className="space-y-2 pt-2">
@@ -728,6 +757,9 @@ function TournamentPoints({ group }: { group: TournamentGroup }) {
         </div>
       )}
 
+      {/* ── Rendimiento de la rueda actual ── */}
+      {roundStats && round && <Rendimiento stats={roundStats} label={`Rendimiento · ${roundLabel(round.round)}`} />}
+
       {/* ── Total del campeonato — la cuenta que realmente importa ── */}
       <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 flex items-center justify-between gap-3">
         <div className="min-w-0">
@@ -750,40 +782,86 @@ function TournamentPoints({ group }: { group: TournamentGroup }) {
         </div>
       </div>
 
-      {/* ── Rendimiento del campeonato ── */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-        <div className="grid grid-cols-4 gap-3 text-center mb-4">
-          {[
-            { label: "PJ", value: totalStats.pj, color: "text-white" },
-            { label: "V", value: totalStats.v, color: "text-emerald-400" },
-            { label: "E", value: totalStats.e, color: "text-amber-400" },
-            { label: "D", value: totalStats.d, color: "text-rose-400" },
-          ].map(({ label, value, color }) => (
-            <div key={label}>
-              <p className={`text-2xl font-semibold ${color}`}>{value}</p>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">{label}</p>
-            </div>
-          ))}
-        </div>
+      {/* ── Ruedas anteriores: registradas, pero sin protagonismo ── */}
+      {ruedasAnteriores.length > 0 && <RuedasAnteriores rondas={ruedasAnteriores} />}
+    </div>
+  );
+}
 
-        <div className="grid grid-cols-3 gap-2 text-center border-t border-white/[0.06] pt-3">
-          {[
-            { label: "Goles a favor", value: totalStats.gf, color: "text-white" },
-            { label: "Goles en contra", value: totalStats.gc, color: "text-white" },
-            {
-              label: "Diferencia",
-              value: dif >= 0 ? `+${dif}` : dif,
-              color:
-                dif > 0 ? "text-emerald-400" : dif < 0 ? "text-rose-400" : "text-white",
-            },
-          ].map(({ label, value, color }) => (
-            <div key={label}>
-              <p className={`text-xl font-semibold ${color}`}>{value}</p>
-              <p className="text-xs text-slate-500 leading-tight mt-0.5">{label}</p>
-            </div>
-          ))}
-        </div>
+/** PJ/V/E/D y goles de un conjunto de partidos. */
+function Rendimiento({ stats, label }: { stats: StatsData; label: string }) {
+  const dif = stats.gf - stats.gc;
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600 mb-3">
+        {label}
+      </p>
+      <div className="grid grid-cols-4 gap-3 text-center mb-4">
+        {[
+          { label: "PJ", value: stats.pj, color: "text-white" },
+          { label: "V", value: stats.v, color: "text-emerald-400" },
+          { label: "E", value: stats.e, color: "text-amber-400" },
+          { label: "D", value: stats.d, color: "text-rose-400" },
+        ].map(({ label, value, color }) => (
+          <div key={label}>
+            <p className={`text-2xl font-semibold ${color}`}>{value}</p>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">{label}</p>
+          </div>
+        ))}
       </div>
+      <div className="grid grid-cols-3 gap-2 text-center border-t border-white/[0.06] pt-3">
+        {[
+          { label: "Goles a favor", value: stats.gf, color: "text-white" },
+          { label: "Goles en contra", value: stats.gc, color: "text-white" },
+          {
+            label: "Diferencia",
+            value: dif >= 0 ? `+${dif}` : dif,
+            color: dif > 0 ? "text-emerald-400" : dif < 0 ? "text-rose-400" : "text-white",
+          },
+        ].map(({ label, value, color }) => (
+          <div key={label}>
+            <p className={`text-xl font-semibold ${color}`}>{value}</p>
+            <p className="text-xs text-slate-500 leading-tight mt-0.5">{label}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Resumen de una línea por rueda terminada. Colapsado por defecto. */
+function RuedasAnteriores({ rondas }: { rondas: RoundGroup[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-white/[0.03] transition-colors"
+      >
+        <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+          Ruedas anteriores
+        </span>
+        <span className="text-[10px] text-slate-600">{rondas.length}</span>
+        <span className="text-slate-500"><Chevron open={open} /></span>
+      </button>
+      {open && (
+        <div className="px-4 pb-3 space-y-1.5">
+          {rondas.map((r) => {
+            const s = computeStatsFromMatches(r.matches);
+            return (
+              <div key={r.round ?? "sin-rueda"} className="flex items-center justify-between gap-3 text-xs">
+                <span className="font-semibold text-slate-300">{roundLabel(r.round)}</span>
+                <span className="text-slate-500 tabular-nums">
+                  <span className="text-white font-semibold">{s.ptsGanados} pts</span>
+                  {" · "}{s.pj} PJ · {s.v}-{s.e}-{s.d}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1256,6 +1334,98 @@ function OnceInicialList({ players }: { players: OncePlayer[] }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+// TAB — TABLA OFICIAL DE LA ASOCIACIÓN
+// ════════════════════════════════════════════════════════════
+function TablaTab({
+  standings,
+  allStandings,
+  tournaments,
+  isAdmin,
+}: {
+  standings: StandingsData[];
+  allStandings: StandingsData[];
+  tournaments: TournamentData[];
+  isAdmin: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      {isAdmin && (
+        <div className="flex justify-end">
+          <StandingsModal tournaments={tournaments} standings={allStandings} />
+        </div>
+      )}
+
+      {standings.length === 0 && (
+        <EmptyState message="La asociación todavía no publicó la tabla de este campeonato." />
+      )}
+
+      {standings.map((s) => (
+        <StandingsTable key={s.id} standings={s} />
+      ))}
+    </div>
+  );
+}
+
+function StandingsTable({ standings }: { standings: StandingsData }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] overflow-hidden">
+      <div className="px-4 pt-4 pb-3 border-b border-white/[0.06]">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">
+          Tabla oficial
+        </p>
+        <p className="text-sm font-bold text-white mt-0.5">{standings.tournamentName}</p>
+      </div>
+
+      <div>
+        {standings.rows.map((r) => {
+          const nosotras = isOurTeam(r.teamName);
+          return (
+            <div
+              key={r.position}
+              className={`flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.04] last:border-b-0 ${
+                nosotras ? "bg-sky-500/[0.08]" : ""
+              }`}
+            >
+              <span
+                className={`w-6 text-right text-xs font-bold tabular-nums shrink-0 ${
+                  r.position <= 3 ? "text-amber-300" : "text-slate-600"
+                }`}
+              >
+                {r.position}
+              </span>
+              <span
+                className={`flex-1 min-w-0 truncate text-sm ${
+                  nosotras ? "font-bold text-sky-200" : "font-medium text-slate-300"
+                }`}
+              >
+                {r.teamName}
+              </span>
+              <span
+                className={`shrink-0 text-sm font-semibold tabular-nums ${
+                  nosotras ? "text-white" : "text-slate-400"
+                }`}
+              >
+                {r.points}
+                <span className="text-[10px] text-slate-600 font-normal ml-1">pts</span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Disclaimer: es una transcripción manual, no datos en vivo */}
+      <div className="px-4 py-3 bg-amber-500/[0.04] border-t border-amber-500/10">
+        <p className="text-[11px] text-amber-200/70 leading-relaxed">
+          <span className="font-semibold text-amber-200/90">Actualizada al {formatAsOf(standings.asOf)}.</span>{" "}
+          Tabla publicada por la asociación y transcrita a mano. No se actualiza
+          en vivo ni incluye los partidos de esta semana.
+        </p>
+      </div>
     </div>
   );
 }
