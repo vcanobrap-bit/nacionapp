@@ -26,7 +26,7 @@ export async function loginAction(
 
   // Validación básica en servidor
   if (!email || !password) {
-    return { error: "Completá todos los campos." };
+    return { error: "Completa todos los campos." };
   }
 
   try {

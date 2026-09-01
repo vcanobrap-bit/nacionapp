@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import AppShell from "./_components/AppShell";
+import type { MatchPhase } from "@/lib/clock";
 
 // Siempre server-rendered para datos frescos de Supabase
 export const dynamic = "force-dynamic";
@@ -29,6 +30,7 @@ export interface MatchData {
   tournamentName: string | null;
   round: number | null;
   fixtureRoundNumber: number | null;
+  halfMinutes: number;
   // Admin-only (undefined para visitantes)
   notes?: string | null;
   currentTitularIds?: string[];
@@ -62,6 +64,8 @@ export interface MatchEventData {
   minute: number | null;
   playerName: string | null;   // autora del gol/tarjeta; o jugadora que Sale en CAMBIO
   player2Name: string | null;  // jugadora que Entra en CAMBIO (null para otros tipos)
+  /// Tiempo en que ocurrió. Agrupa la bitácora; null en partidos viejos.
+  phase: MatchPhase | null;
 }
 
 export interface LiveMatchConvocada {
@@ -81,6 +85,11 @@ export interface LiveMatchData {
   tournamentName: string | null;
   once: OncePlayer[];
   events: MatchEventData[];
+  // ── Fase y reloj ──
+  phase: MatchPhase;
+  periodStartedAt: string | null; // ISO, null = reloj detenido
+  clockBaseSeconds: number;
+  halfMinutes: number;
   // Admin-only
   convocadas?: LiveMatchConvocada[];
 }
@@ -157,6 +166,7 @@ export default async function HomePage() {
       player2Name: ev.player2?.profile
         ? `${ev.player2.profile.firstName} ${ev.player2.profile.lastName}`.trim()
         : null,
+      phase: (ev.phase as MatchPhase | null) ?? null,
     }));
 
     return {
@@ -174,6 +184,7 @@ export default async function HomePage() {
       tournamentName: m.tournament?.name ?? null,
       round: m.round,
       fixtureRoundNumber: m.fixtureRoundNumber,
+      halfMinutes: m.halfMinutes,
     };
   });
 
@@ -256,6 +267,10 @@ export default async function HomePage() {
         homeScore: rawLive.homeScore ?? 0,
         awayScore: rawLive.awayScore ?? 0,
         tournamentName: rawLive.tournament?.name ?? null,
+        phase: rawLive.phase as MatchPhase,
+        periodStartedAt: rawLive.periodStartedAt?.toISOString() ?? null,
+        clockBaseSeconds: rawLive.clockBaseSeconds,
+        halfMinutes: rawLive.halfMinutes,
         once: rawLive.players
           .filter((pm) => pm.isTitular)
           .map((pm) => ({
@@ -280,6 +295,7 @@ export default async function HomePage() {
           player2Name: ev.player2?.profile
             ? `${ev.player2.profile.firstName} ${ev.player2.profile.lastName}`.trim()
             : null,
+          phase: (ev.phase as MatchPhase | null) ?? null,
         })),
         // Admin: lista para los botones de acción — todo el plantel inscrito,
         // marcando quiénes son titulares en este partido (para Sale/Entra en cambios)
@@ -308,6 +324,11 @@ export default async function HomePage() {
 
   return (
     <AppShell
+      // Server Component: se renderiza una vez por request, así que leer el
+      // reloj acá es estable. El cliente usa este valor para corregir el
+      // desfase de la hora de su dispositivo al mostrar el reloj del partido.
+      // eslint-disable-next-line react-hooks/purity
+      serverNow={Date.now()}
       matches={adminMatches}
       players={adminPlayers}
       tournaments={tournaments}

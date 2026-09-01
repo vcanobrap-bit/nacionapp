@@ -379,7 +379,7 @@ export default function PlayerModal({
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
               {isEdit
-                ? "Editá el perfil y datos del cuerpo técnico"
+                ? "Edita el perfil y datos del cuerpo técnico"
                 : "Perfil deportivo — sin acceso a la plataforma"}
             </p>
           </div>

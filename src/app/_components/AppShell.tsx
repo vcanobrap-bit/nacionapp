@@ -9,7 +9,8 @@ import MatchModal from "./admin/MatchModal";
 import PlayerModal from "./admin/PlayerModal";
 import AddAdminModal from "./admin/AddAdminModal";
 import TournamentModal from "./admin/TournamentModal";
-import LiveMatchCard from "./LiveMatchCard";
+import LiveMatchCard, { groupEventsByPhase } from "./LiveMatchCard";
+import { PHASE_LABEL } from "@/lib/clock";
 import type { MatchData, PlayerData, StatsData, OncePlayer, TournamentData, LiveMatchData, MatchEventData } from "../page";
 
 // ── Types ─────────────────────────────────────────────────
@@ -28,7 +29,7 @@ function calcAge(iso: string): number {
 }
 
 function formatDate(iso: string, opts?: Intl.DateTimeFormatOptions): string {
-  return new Date(iso).toLocaleDateString("es-AR", opts ?? {
+  return new Date(iso).toLocaleDateString("es-CL", opts ?? {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
   });
 }
@@ -36,7 +37,7 @@ function formatDate(iso: string, opts?: Intl.DateTimeFormatOptions): string {
 function formatBirthdate(iso: string): string {
   // Formatear en UTC: la fecha se guarda como medianoche UTC y en zonas UTC-x
   // el formato local mostraría el día anterior.
-  return new Date(iso).toLocaleDateString("es-AR", {
+  return new Date(iso).toLocaleDateString("es-CL", {
     day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
   });
 }
@@ -100,8 +101,10 @@ function PencilIcon() {
 
 // ── Main component ────────────────────────────────────────
 export default function AppShell({
-  matches, players, tournaments, adminEmail, liveMatch,
+  serverNow, matches, players, tournaments, adminEmail, liveMatch,
 }: {
+  /** Hora del servidor al renderizar; corrige el desfase del reloj del dispositivo. */
+  serverNow: number;
   matches: MatchData[];
   players: PlayerData[];
   tournaments: TournamentData[];
@@ -293,6 +296,7 @@ export default function AppShell({
 
         {tab === "posiciones" && (
           <PosicionesTab
+            serverNow={serverNow}
             matches={filteredMatches}
             tournaments={tournaments}
             nextMatch={nextMatch}
@@ -377,9 +381,9 @@ function ProximoPartidoCard({ match }: { match: MatchData }) {
     diffDays < 0    ? "bg-amber-500/10   border-amber-500/20   text-amber-400"   :
                       "bg-white/[0.05]   border-white/10       text-slate-400";
 
-  const weekday  = date.toLocaleDateString("es-AR", { weekday: "long" });
-  const dayNum   = date.toLocaleDateString("es-AR", { day: "numeric" });
-  const monthStr = date.toLocaleDateString("es-AR", { month: "long" });
+  const weekday  = date.toLocaleDateString("es-CL", { weekday: "long" });
+  const dayNum   = date.toLocaleDateString("es-CL", { day: "numeric" });
+  const monthStr = date.toLocaleDateString("es-CL", { month: "long" });
   const year     = date.getFullYear();
 
   return (
@@ -597,6 +601,7 @@ function Chevron({ open }: { open: boolean }) {
 // TAB 1 — POSICIONES
 // ════════════════════════════════════════════════════════════
 function PosicionesTab({
+  serverNow,
   matches,
   tournaments,
   nextMatch,
@@ -604,6 +609,7 @@ function PosicionesTab({
   liveMatch,
   isAdmin,
 }: {
+  serverNow: number;
   matches: MatchData[];
   tournaments: TournamentData[];
   nextMatch: MatchData | null;
@@ -616,7 +622,9 @@ function PosicionesTab({
   return (
     <div className="space-y-3">
       {/* Tarjeta en vivo — prioritaria cuando hay partido en curso */}
-      {liveMatch && <LiveMatchCard match={liveMatch} isAdmin={isAdmin} />}
+      {liveMatch && (
+        <LiveMatchCard match={liveMatch} isAdmin={isAdmin} serverNow={serverNow} />
+      )}
 
       {nextMatch && !hasLive && <ProximoPartidoCard match={nextMatch} />}
 
@@ -788,7 +796,7 @@ function PartidosTab({
       )}
 
       {matches.length === 0 && isAdmin && (
-        <EmptyState message="No hay partidos todavía. Creá el primero." />
+        <EmptyState message="No hay partidos todavía. Crea el primero." />
       )}
 
       {groups.map((g) => (
@@ -1122,19 +1130,27 @@ function MatchCard({
 
 // Bitácora de incidencias del partido (solo lectura, para partidos jugados)
 function BitacoraList({ events, opponent }: { events: MatchEventData[]; opponent: string }) {
+  // Agrupada por tiempo: sin la notación "30+2" del fútbol profesional, el
+  // minuto 32 sería ambiguo (¿adición del primero, o minuto 2 del segundo,
+  // que arranca en 30?). El encabezado de cada tiempo lo resuelve.
   return (
-    <div className="space-y-1.5">
-      {events.map((ev) => (
+    <div className="space-y-3">
+      {groupEventsByPhase(events).map((grupo) => (
+        <div key={grupo.phase ?? "sin-fase"} className="space-y-1.5">
+          {grupo.phase && (
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+              {PHASE_LABEL[grupo.phase]}
+            </p>
+          )}
+          {grupo.events.map((ev) => (
         <div key={ev.id} className="flex items-center gap-2.5 text-sm">
           <span className="shrink-0">
             {ev.type === "GOAL" ? "⚽" : ev.type === "AMARILLA" ? "🟨" : ev.type === "ROJA" ? "🟥" : "🔄"}
           </span>
 
-          {ev.minute != null && (
-            <span className="text-[11px] font-bold text-slate-500 w-8 text-right shrink-0">
-              {ev.minute}&apos;
-            </span>
-          )}
+          <span className="text-[11px] font-bold text-slate-500 w-8 text-right shrink-0">
+            {ev.minute != null ? `${ev.minute}'` : ""}
+          </span>
 
           {ev.type === "CAMBIO" ? (
             <span className="text-slate-300 font-medium leading-tight flex-1 min-w-0 text-xs">
@@ -1155,6 +1171,8 @@ function BitacoraList({ events, opponent }: { events: MatchEventData[]; opponent
               )}
             </span>
           )}
+            </div>
+          ))}
         </div>
       ))}
     </div>
@@ -1259,7 +1277,7 @@ function PlantelTab({
       )}
 
       {players.length === 0 && isAdmin && (
-        <EmptyState message="No hay jugadoras todavía. Agregá la primera." />
+        <EmptyState message="No hay jugadoras todavía. Agrega la primera." />
       )}
 
       {sortedGroups.map((pos) => (
