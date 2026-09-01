@@ -29,21 +29,25 @@ import type { LiveMatchData, MatchEventData } from "../page";
 /**
  * Segundos de juego, actualizados cada segundo.
  *
- * `serverNow` corrige el desfase del reloj del dispositivo: si el teléfono
- * tiene la hora mal puesta, sin esta corrección el minuto saldría corrido.
- * Queda un margen del orden del segundo (lo que tarda en hidratar), que para
- * marcar incidencias es irrelevante.
+ * `serverNow` se usa SOLO para el primer render, así el HTML del servidor y
+ * el del cliente coinciden. Cada tick lee `Date.now()` directo.
+ *
+ * Antes se intentaba corregir el desfase del reloj del teléfono con un
+ * `offset = serverNow − Date.now()` calculado al hidratar. Estaba mal: como
+ * `serverNow` es del SSR, el offset absorbía el retraso de hidratación y lo
+ * restaba a cada lectura, así que el reloj quedaba en 0:00 varios segundos y
+ * después corría atrasado. Un teléfono con la hora mal puesta es raro; un
+ * reloj que no arranca, no.
  */
 function useMatchClock(clock: ClockState, serverNow: number): number {
-  const [offset] = useState(() => serverNow - Date.now());
   const [now, setNow] = useState(serverNow);
 
   useEffect(() => {
     // Con el reloj detenido (entretiempo) no hay nada que actualizar.
     if (!clock.periodStartedAt) return;
-    const id = setInterval(() => setNow(Date.now() + offset), 1000);
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [clock.periodStartedAt, offset]);
+  }, [clock.periodStartedAt]);
 
   return clockSeconds(clock, now);
 }

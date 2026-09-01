@@ -121,9 +121,34 @@ dispositivos. **Nunca** guardar un contador de minutos en estado de React.
 convención del fútbol y hace comparables los minutos entre partidos.
 `npm run test:clock` verifica esta regla.
 
-`serverNow` viaja de `page.tsx` al cliente para corregir el desfase del reloj
-del dispositivo: `periodStartedAt` lo pone el servidor, así que un teléfono con
-la hora mal puesta mostraría un minuto corrido.
+`serverNow` viaja de `page.tsx` al cliente **solo para el primer render**, para
+que el HTML del servidor y el del cliente coincidan. Cada tick del reloj lee
+`Date.now()` directo.
+
+> **No agregar corrección de desfase del reloj del teléfono.** Se intentó con
+> `offset = serverNow − Date.now()` calculado al hidratar, y estaba mal: como
+> `serverNow` es del SSR, el offset absorbía el retraso de hidratación (1–5 s en
+> un teléfono) y lo restaba a cada lectura. Resultado: el reloj quedaba en 0:00
+> varios segundos y luego corría atrasado — "el reloj no corre". Un teléfono con
+> la hora mal puesta es raro; un reloj que no arranca, no. Si algún día hace
+> falta, la corrección debe medirse con un round-trip, nunca contra el SSR.
+
+### Flujo guiado el día del partido
+
+Para que la usuaria no se pierda entre pantallas, el modal encadena los pasos:
+
+1. Guardar el partido como **"En curso"** (desde `PENDING`) no cierra el modal:
+   muestra un prompt "¿Cargar el once inicial ahora?" con "Completar después".
+   Solo aparece si el partido *pasó* a en curso (`becameLive`), no al editar uno
+   que ya lo estaba. Mientras se muestra, `PartidoForm` se **desmonta**: si
+   siguiera montado, su efecto de éxito se re-dispararía en cada refresh y el
+   prompt se abriría en bucle.
+2. Guardar el once (`onLineupSaved`) cierra el modal y lleva a **Posiciones**
+   con scroll arriba: ahí está la tarjeta en vivo con "▶ Iniciar 1er tiempo".
+
+`AppShell` guarda `editingMatchId` y deriva el partido desde `matches`, no el
+objeto: así, tras un `router.refresh()`, el modal ve el estado y los titulares
+frescos en vez de la copia capturada al abrirlo.
 
 ### Fútbol amateur: sin "+3" de adición
 

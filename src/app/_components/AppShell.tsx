@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import WebGLBackground from "./WebGLBackground";
@@ -118,23 +118,28 @@ export default function AppShell({
 
   // ── Modal state ──────────────────────────────────────────
   const [matchModalOpen, setMatchModalOpen] = useState(false);
-  const [editingMatch, setEditingMatch] = useState<MatchData | undefined>(undefined);
+  // Se guarda el id, no el objeto: tras un router.refresh() el modal debe ver
+  // los datos frescos del partido (estado, titulares), no la copia de al abrir.
+  const [editingMatchId, setEditingMatchId] = useState<string | undefined>(undefined);
+  const editingMatch = editingMatchId
+    ? matches.find((m) => m.id === editingMatchId)
+    : undefined;
   const [matchInitialTab, setMatchInitialTab] = useState<"partido" | "once">("partido");
   const [playerModalOpen, setPlayerModalOpen] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<PlayerData | undefined>(undefined);
 
   function openNewMatch() {
-    setEditingMatch(undefined);
+    setEditingMatchId(undefined);
     setMatchInitialTab("partido");
     setMatchModalOpen(true);
   }
   function openEditMatch(match: MatchData) {
-    setEditingMatch(match);
+    setEditingMatchId(match.id);
     setMatchInitialTab("partido");
     setMatchModalOpen(true);
   }
   function openCompleteOnce(match: MatchData) {
-    setEditingMatch(match);
+    setEditingMatchId(match.id);
     setMatchInitialTab("once");
     setMatchModalOpen(true);
   }
@@ -146,6 +151,19 @@ export default function AppShell({
     setEditingPlayer(player);
     setPlayerModalOpen(true);
   }
+
+  const closeMatchModal = useCallback(() => setMatchModalOpen(false), []);
+
+  /**
+   * Tras guardar el once, llevar a la usuaria al inicio: ahí está la tarjeta
+   * en vivo con el botón de iniciar el partido. Sin esto, queda en Partidos
+   * sin saber dónde seguir.
+   */
+  const goToLiveCard = useCallback(() => {
+    setMatchModalOpen(false);
+    setTab("posiciones");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "posiciones", label: "Posiciones" },
@@ -337,7 +355,8 @@ export default function AppShell({
         <>
           <MatchModal
             isOpen={matchModalOpen}
-            onClose={() => setMatchModalOpen(false)}
+            onClose={closeMatchModal}
+            onLineupSaved={goToLiveCard}
             match={editingMatch}
             tournaments={tournaments}
             players={players}
