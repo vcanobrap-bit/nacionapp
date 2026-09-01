@@ -138,8 +138,8 @@ model StandingsSnapshot {
 model StandingsRow {
   id         String @id @default(cuid())
   snapshotId String
-  /// Orden tal como lo publica la asociación. No se recalcula: la tabla
-  /// oficial puede tener desempates que no conocemos.
+  /// Puesto en la tabla, ordenada por puntos de mayor a menor
+  /// (`sortByPoints`). Empates conservan el orden en que se cargaron.
   position   Int
   teamName   String
   points     Int

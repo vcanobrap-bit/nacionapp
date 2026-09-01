@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import AppShell from "./_components/AppShell";
 import type { MatchPhase } from "@/lib/clock";
+import { sortByPoints } from "@/lib/standings";
 
 // Siempre server-rendered para datos frescos de Supabase
 export const dynamic = "force-dynamic";
@@ -183,7 +184,9 @@ export default async function HomePage({
       tournamentId: s.tournamentId,
       tournamentName: s.tournament.name,
       asOf: s.asOf.toISOString(),
-      rows: s.rows.map((r) => ({ position: r.position, teamName: r.teamName, points: r.points })),
+      // Orden por puntos también acá: los snapshots cargados antes de que
+      // existiera sortByPoints tienen `position` en orden de pegado.
+      rows: sortByPoints(s.rows).map((r, i) => ({ position: i + 1, teamName: r.teamName, points: r.points })),
     });
   }
 
