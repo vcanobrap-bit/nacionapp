@@ -93,6 +93,58 @@ partido pasa a `FINISHED`: `src/app/page.tsx` los serializa en `MatchData.events
 `AppShell` los renderiza con `BitacoraList`. Al tocar los eventos, recordar que hay
 **dos** superficies que los muestran: la tarjeta en vivo y la bitácora del partido jugado.
 
+## Partido en vivo — fases y reloj
+
+`MatchStatus.IN_PROGRESS` significa "este partido se gestiona en vivo", **no**
+"la pelota está rodando". Adentro vive `Match.phase`:
+
+| Fase | En la cancha | Qué habilita |
+|---|---|---|
+| `PRE` | Camarín y calentamiento | Cargar el once. Sin reloj. **Sin incidencias.** |
+| `FIRST_HALF` | Pitazo inicial | Reloj desde 0. Incidencias con minuto. |
+| `HALF_TIME` | Descanso | Reloj congelado. Cambios del DT sin minuto. |
+| `SECOND_HALF` | Vuelta | Reloj retoma en `halfMinutes*60`. |
+
+El motivo del `PRE`: el once se carga ~40 minutos antes del partido, y antes
+había que marcar el partido "en curso" solo para poder cargarlo, mostrando
+"En juego" mientras el equipo todavía calentaba.
+
+### El reloj se guarda como marcas de tiempo, no como minutos
+
+`periodStartedAt` (cuándo arrancó el período) + `clockBaseSeconds` (en qué
+segundo arranca). El minuto se **calcula** (`src/lib/clock.ts`). Así el reloj
+sobrevive a un refresh, a que se apague el teléfono y es igual en todos los
+dispositivos. **Nunca** guardar un contador de minutos en estado de React.
+
+**El 2do tiempo retoma en el reglamentario del primero** (30:00 con tiempos de
+30), no en 0 ni donde haya terminado el 1er tiempo con su adición. Es la
+convención del fútbol y hace comparables los minutos entre partidos.
+`npm run test:clock` verifica esta regla.
+
+`serverNow` viaja de `page.tsx` al cliente para corregir el desfase del reloj
+del dispositivo: `periodStartedAt` lo pone el servidor, así que un teléfono con
+la hora mal puesta mostraría un minuto corrido.
+
+### Fútbol amateur: sin "+3" de adición
+
+El árbitro no anuncia cuánta adición se juega y no hay tablero. La app **no
+inventa** un `30+2`: el reloj sigue corriendo (32:15) y solo se pone **ámbar**
+al pasar el reglamentario. Por eso la bitácora se agrupa por tiempo en vez de
+usar notación: sin ella el minuto 32 sería ambiguo (¿adición del primero, o
+minuto 2 del segundo, que arranca en 30?).
+
+### La regla del minuto en el entretiempo
+
+Con el partido en `HALF_TIME`, el minuto que se escriba decide la fase real de
+la incidencia (`contextoIncidencia` en `lib/actions/partidos.ts`):
+
+- **Sin minuto** → ocurrió en el entretiempo (los cambios del DT en el camarín).
+- **Con minuto** → es algo del primer tiempo que se carga tarde ("nos olvidamos
+  del gol del 22"), y se guarda como `FIRST_HALF`.
+
+Como las incidencias del entretiempo no llevan minuto, da lo mismo cuándo se
+carguen: sirve para el camarín, donde suele no haber señal.
+
 ## Vista de Partidos — jerarquía desplegable
 
 La pestaña Partidos agrupa en tres niveles, todos colapsables
@@ -157,7 +209,8 @@ import { PrismaPg } from "@prisma/adapter-pg";
 - Client Components en `_components/`; los de administración en `_components/admin/`.
 - Todos los formularios usan `useActionState` (React 19) — nunca `useState` manual para forms
 - Server Actions protegen sus mutaciones con `requireAdmin()` (llama a `auth()` y verifica `role`)
-- Nombres en español (variables, labels, mensajes de error)
+- Nombres y textos en **español de Chile**: tuteo, nunca voseo rioplatense
+  ("Selecciona", no "Seleccioná"; "Puedes", no "Podés"). Fechas con locale `es-CL`.
 - `revalidatePath("/")` después de toda mutación (y `/api/partidos/en-vivo` si toca el partido en curso)
 - **No resetear estado desde un `useEffect`** (ESLint `react-hooks/set-state-in-effect` lo marca
   como error). Para que un modal arranque limpio, montar el contenido condicionalmente con una
@@ -203,3 +256,11 @@ npm run lint         # ESLint
    ```
    Vale para cualquier enum (`MatchStatus`, `EventType`, `PlayerStatus`, `MatchResult`, `Role`).
    Verificar con: `SELECT unnest(enum_range(NULL::"MatchStatus"));`
+
+   Lo mismo aplica a **columnas nuevas**. Generar el SQL exacto con:
+   ```bash
+   npx prisma migrate diff --from-schema <schema-viejo> --to-schema prisma/schema.prisma --script
+   ```
+   Por eso `Match.phase` es `String` y no un enum: las fases son lo que más
+   probable es que crezca (prórroga, penales) y cada valor nuevo costaría otro
+   `ALTER TYPE` a mano contra producción.

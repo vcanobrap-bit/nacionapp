@@ -126,6 +126,21 @@ model Match {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
+  // ── Fase y reloj del partido en vivo ──────────────────────
+  /// Fase dentro de un partido IN_PROGRESS:
+  /// PRE (once cargado, calentando) | FIRST_HALF | HALF_TIME | SECOND_HALF
+  /// Se guarda como String y no como enum de Postgres: agregar valores a un
+  /// enum exige SQL manual en producción (ver gotcha del ALTER TYPE), y las
+  /// fases son justamente lo que más probable es que crezca (prórroga, penales).
+  phase            String    @default("PRE")
+  /// Momento en que arrancó el período actual. null = reloj detenido.
+  periodStartedAt  DateTime?
+  /// Segundos acumulados al inicio del período actual: 0 en el primer tiempo,
+  /// halfMinutes*60 en el segundo (el 2T retoma en 30:00, no en 0 ni en 33).
+  clockBaseSeconds Int       @default(0)
+  /// Duración de cada tiempo en minutos. 30 en el torneo local.
+  halfMinutes      Int       @default(30)
+
   // ── Torneo / Fixture ──────────────────────────
   tournamentId       String?  // FK a Tournament (opcional)
   round              Int?     // Rueda (1, 2, …) — solo torneos con ruedas
@@ -156,7 +171,13 @@ model MatchEvent {
   playerId  String?
   /// Solo para CAMBIO: la jugadora que Entra
   player2Id String?
+  /// Minuto de juego. null en las incidencias del entretiempo: no ocurren en
+  /// un minuto del reloj, y `phase` ya dice cuándo fueron.
   minute    Int?
+  /// Fase en que ocurrió: FIRST_HALF | HALF_TIME | SECOND_HALF.
+  /// Agrupa la bitácora por tiempo y desambigua el minuto (el 32 puede ser
+  /// adición del primer tiempo o minuto 2 del segundo, que arranca en 30).
+  phase     String?
   createdAt DateTime  @default(now())
 
   match   Match @relation(fields: [matchId], references: [id], onDelete: Cascade)

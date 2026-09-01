@@ -19,7 +19,7 @@ function calcAge(date: Date): number {
 function formatDate(date: Date): string {
   // La fecha de nacimiento se guarda como medianoche UTC: formatear en UTC
   // para que no se corra un día según la zona horaria del servidor.
-  return date.toLocaleDateString("es-AR", {
+  return date.toLocaleDateString("es-CL", {
     day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
   });
 }

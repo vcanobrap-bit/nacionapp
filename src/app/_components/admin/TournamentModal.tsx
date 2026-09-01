@@ -206,7 +206,7 @@ export default function TournamentModal({
                   Campeonatos
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Creá y gestioná los torneos del club
+                  Crea y gestiona los torneos del club
                 </p>
               </div>
               <button

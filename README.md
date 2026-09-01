@@ -19,8 +19,9 @@ la misma vista pública.
 
 - Alta y edición de jugadoras (datos públicos + estado físico y notas internas privadas).
 - Alta y edición de partidos, campeonatos y armado del once inicial.
-- **Consola de partido en vivo**: goles propios y rivales, tarjetas, sustituciones y
-  cierre del partido con cálculo automático del resultado.
+- **Consola de partido en vivo**: fases (previa, 1er tiempo, entretiempo, 2do tiempo)
+  con reloj que retoma en el reglamentario, goles propios y rivales, tarjetas,
+  sustituciones —incluidas las del entretiempo— y cierre con resultado automático.
 - Las incidencias cargadas en vivo quedan como **bitácora** del partido una vez jugado.
 
 **API pública** — `GET /api/partidos/en-vivo` devuelve el partido en curso con su once
@@ -51,6 +52,7 @@ npm run db:generate  # Regenerar el cliente Prisma
 npm run db:seed      # Poblar con datos de ejemplo
 npm run db:studio    # Prisma Studio
 npm run lint         # ESLint
+npm run test:clock   # Verifica la lógica del reloj del partido
 ```
 
 ## Estructura

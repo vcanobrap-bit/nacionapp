@@ -198,6 +198,23 @@ function PartidoForm({
             />
           </div>
         </div>
+
+        <div className="w-40">
+          <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
+            Minutos por tiempo
+          </label>
+          <input
+            type="number"
+            name="halfMinutes"
+            min="1"
+            max="60"
+            defaultValue={(match?.halfMinutes ?? 30).toString()}
+            className={FIELD}
+          />
+          <p className="text-[10px] text-slate-600 mt-1 leading-snug">
+            Define dónde retoma el reloj en el 2do tiempo.
+          </p>
+        </div>
       </div>
 
       {/* ── Resultado — solo FINISHED ───────────────────────── */}
@@ -217,7 +234,7 @@ function PartidoForm({
                 required
                 className={FIELD + " [color-scheme:dark] bg-slate-900/80"}
               >
-                <option value="">Seleccioná</option>
+                <option value="">Selecciona</option>
                 <option value="WIN">Victoria</option>
                 <option value="LOSS">Derrota</option>
                 <option value="DRAW">Empate</option>
@@ -563,8 +580,8 @@ function MatchModalContent({
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
               {isEdit
-                ? "Modificá los datos del partido"
-                : "Completá los datos del nuevo partido"}
+                ? "Modifica los datos del partido"
+                : "Completa los datos del nuevo partido"}
             </p>
           </div>
           <button
