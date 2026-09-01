@@ -9,6 +9,7 @@ import {
   type TournamentFormState,
 } from "@/lib/actions/torneos";
 import type { TournamentData } from "@/app/page";
+import ModalPortal from "./ModalPortal";
 
 const FIELD =
   "w-full rounded-xl bg-white/[0.04] border border-white/10 px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500/40 transition-all duration-150";
@@ -191,13 +192,14 @@ export default function TournamentModal({
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={() => setOpen(false)}
           />
 
-          <div className="relative w-full sm:max-w-md bg-[#080D16] border border-white/[0.08] rounded-t-3xl sm:rounded-2xl shadow-2xl max-h-[92vh] flex flex-col">
+          <div className="relative w-full max-w-md bg-[#080D16] border border-white/[0.08] rounded-2xl shadow-2xl max-h-[85vh] flex flex-col">
             <div className="flex items-start justify-between p-5 shrink-0">
               <div>
                 <h2 className="text-base font-semibold text-white leading-snug">
@@ -250,6 +252,7 @@ export default function TournamentModal({
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </>
   );

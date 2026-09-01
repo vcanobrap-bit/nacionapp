@@ -99,33 +99,6 @@ export interface StatsData {
   inProgressCount: number;
 }
 
-// ── Helpers ───────────────────────────────────────────────────
-function computeStats(matches: { status: string; result: string | null; homeScore: number | null; awayScore: number | null }[]): StatsData {
-  const finished = matches.filter((m) => m.status === "FINISHED");
-  // POSTPONED (reagendado) sigue siendo un partido por jugar a efectos de puntos
-  const pending  = matches.filter((m) => m.status === "PENDING" || m.status === "POSTPONED");
-  const live     = matches.filter((m) => m.status === "IN_PROGRESS");
-
-  const v  = finished.filter((m) => m.result === "WIN").length;
-  const e  = finished.filter((m) => m.result === "DRAW").length;
-  const d  = finished.filter((m) => m.result === "LOSS").length;
-  const gf = finished.reduce((s, m) => s + (m.homeScore ?? 0), 0);
-  const gc = finished.reduce((s, m) => s + (m.awayScore ?? 0), 0);
-
-  const ptsGanados    = v * 3 + e;
-  const ptsPendientes = pending.length * 3;
-
-  return {
-    pj: finished.length,
-    v, e, d, gf, gc,
-    ptsGanados,
-    ptsPendientes,
-    ptsIdeales: ptsGanados + ptsPendientes,
-    pendingCount: pending.length,
-    inProgressCount: live.length,
-  };
-}
-
 // ── Page (Server Component) ───────────────────────────────────
 export default async function HomePage() {
   const [rawMatches, rawPlayers, rawTournaments] = await Promise.all([
@@ -232,8 +205,6 @@ export default async function HomePage() {
     isActive: t.isActive,
   }));
 
-  const stats = computeStats(rawMatches);
-
   const session = await auth();
   const isAdmin = session?.user?.role === "ADMIN";
   const adminEmail = session?.user?.email ?? null;
@@ -339,7 +310,6 @@ export default async function HomePage() {
     <AppShell
       matches={adminMatches}
       players={adminPlayers}
-      stats={stats}
       tournaments={tournaments}
       adminEmail={adminEmail}
       liveMatch={liveMatch}

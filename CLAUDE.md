@@ -93,6 +93,40 @@ partido pasa a `FINISHED`: `src/app/page.tsx` los serializa en `MatchData.events
 `AppShell` los renderiza con `BitacoraList`. Al tocar los eventos, recordar que hay
 **dos** superficies que los muestran: la tarjeta en vivo y la bitácora del partido jugado.
 
+## Vista de Partidos — jerarquía desplegable
+
+La pestaña Partidos agrupa en tres niveles, todos colapsables
+(`groupByTournament` en `AppShell.tsx`):
+
+```
+Torneo          → desplegado si NO está finalizado
+  Rueda         → desplegada solo si está "live" o "current"
+    Partido     → SIEMPRE arranca contraído
+```
+
+Estados de rueda (`RoundState`), que definen badge y despliegue por defecto:
+
+| Estado | Significado | Arranca abierta |
+|---|---|---|
+| `live` | tiene un partido en curso | sí |
+| `current` | arrancó pero no terminó | sí |
+| `next` | **próxima rueda**: no arrancó y una rueda anterior sigue abierta | no |
+| `upcoming` | no arrancó y no es la inmediata siguiente | no |
+| `finished` | todos sus partidos jugados | no |
+
+Dentro de una rueda los partidos se ordenan con el que está en curso primero
+y luego del más reciente al más antiguo (`sortMatchesInRound`).
+
+Contraído, un partido muestra solo rival, etiqueta de estado/resultado y
+marcador. El resto (fecha, cancha, bitácora, once inicial) va en el desplegable.
+
+## Puntos — nunca se suman entre torneos
+
+`PosicionesTab` renderiza un bloque `TournamentPoints` **por campeonato**:
+tarjeta principal con los puntos de la rueda actual, tarjeta chica con el total
+del campeonato, y el rendimiento (PJ/V/E/D, GF/GC) de ese campeonato.
+Los puntos de torneos distintos jamás se agregan entre sí.
+
 ## Rutas
 
 | Ruta | Descripción |
@@ -128,6 +162,13 @@ import { PrismaPg } from "@prisma/adapter-pg";
 - **No resetear estado desde un `useEffect`** (ESLint `react-hooks/set-state-in-effect` lo marca
   como error). Para que un modal arranque limpio, montar el contenido condicionalmente con una
   `key` derivada de los props — ver `MatchModal` (wrapper + `MatchModalContent`).
+- **Modales montados dentro de `<main>` necesitan `ModalPortal`**: `main` tiene `z-10` y
+  crea un contexto de apilamiento, así que un `fixed z-50` interno igual queda por debajo
+  del header (`z-20`). `MatchModal`/`PlayerModal` se montan en la raíz de `AppShell` y no
+  lo necesitan; `TournamentModal` y `AddAdminModal` sí.
+- **Nada que dependa solo de `hover`**: en táctil no existe. Para revelar controles al pasar
+  el mouse, usar `opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/x:opacity-100`
+  para que en móvil queden siempre visibles.
 - Sistema de diseño visual documentado en `DESIGN.md` (glass surfaces, gradientes, radios, motion)
 
 ## Scripts npm

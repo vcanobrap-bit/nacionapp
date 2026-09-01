@@ -96,7 +96,7 @@ function EventFeed({
               onClick={() => handleDelete(ev.id)}
               disabled={deletingId === ev.id}
               title="Eliminar incidencia"
-              className="shrink-0 opacity-0 group-hover/ev:opacity-100 w-5 h-5 flex items-center justify-center rounded-full text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-30"
+              className="shrink-0 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/ev:opacity-100 w-5 h-5 flex items-center justify-center rounded-full text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-30"
             >
               {deletingId === ev.id ? (
                 <span className="w-3 h-3 border border-slate-600 border-t-transparent rounded-full animate-spin" />
