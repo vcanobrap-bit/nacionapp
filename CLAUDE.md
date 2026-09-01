@@ -137,12 +137,12 @@ que el HTML del servidor y el del cliente coincidan. Cada tick del reloj lee
 
 Para que la usuaria no se pierda entre pantallas, el modal encadena los pasos:
 
-1. Guardar el partido como **"En curso"** (desde `PENDING`) no cierra el modal:
-   muestra un prompt "¿Cargar el once inicial ahora?" con "Completar después".
-   Solo aparece si el partido *pasó* a en curso (`becameLive`), no al editar uno
-   que ya lo estaba. Mientras se muestra, `PartidoForm` se **desmonta**: si
-   siguiera montado, su efecto de éxito se re-dispararía en cada refresh y el
-   prompt se abriría en bucle.
+1. Guardar el partido como **"En curso"** no cierra el modal: muestra un prompt
+   "¿Cargar el once inicial ahora?" con "Completar después". Aparece si quedó en
+   curso **sin once cargado** (`needsLineup`), no al editar uno que ya tiene once
+   (por ejemplo, las notas a mitad de partido). Mientras se muestra,
+   `PartidoForm` se **desmonta**: si siguiera montado, su efecto de éxito se
+   re-dispararía en cada refresh y el prompt se abriría en bucle.
 2. Guardar el once (`onLineupSaved`) cierra el modal y lleva a **Posiciones**
    con scroll arriba: ahí está la tarjeta en vivo con "▶ Iniciar 1er tiempo".
 
@@ -237,6 +237,14 @@ import { PrismaPg } from "@prisma/adapter-pg";
 - Nombres y textos en **español de Chile**: tuteo, nunca voseo rioplatense
   ("Selecciona", no "Seleccioná"; "Puedes", no "Podés"). Fechas con locale `es-CL`.
 - `revalidatePath("/")` después de toda mutación (y `/api/partidos/en-vivo` si toca el partido en curso)
+- **Un Server Action que llama a `revalidatePath` refresca los props ANTES de que
+  `useActionState` entregue su resultado.** Por eso, en un efecto de éxito, nunca
+  derivar "¿cambió X?" comparando contra un prop que la propia acción modifica: al
+  correr el efecto, el prop ya tiene el valor nuevo y la comparación da falso. Fue
+  el bug del prompt del once: `becameLive = status === "IN_PROGRESS" && !wasLive`
+  siempre daba `false` porque `match.status` ya era `IN_PROGRESS`. Decidir con un
+  dato que la acción **no** toca (ahí, `currentTitularIds`). Reproducible en jsdom
+  simulando la revalidación dentro de la acción.
 - **No resetear estado desde un `useEffect`** (ESLint `react-hooks/set-state-in-effect` lo marca
   como error). Para que un modal arranque limpio, montar el contenido condicionalmente con una
   `key` derivada de los props — ver `MatchModal` (wrapper + `MatchModalContent`).

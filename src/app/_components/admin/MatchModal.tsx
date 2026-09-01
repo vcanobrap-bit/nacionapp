@@ -36,8 +36,8 @@ function PartidoForm({
 }: {
   match?: MatchData;
   tournaments: TournamentData[];
-  /** `becameLive`: el partido acaba de pasar a "en curso" (no lo estaba antes). */
-  onSuccess: (info: { becameLive: boolean }) => void;
+  /** `needsLineup`: quedó en curso y todavía no tiene once inicial cargado. */
+  onSuccess: (info: { needsLineup: boolean }) => void;
   onDeleteSuccess: () => void;
 }) {
   const action = match ? updateMatchAction : createMatchAction;
@@ -50,12 +50,18 @@ function PartidoForm({
   );
   const [deleting, startDelete] = useTransition();
 
-  const wasLive = match?.status === "IN_PROGRESS";
+  // La pregunta correcta es "¿quedó en curso SIN once?", no "¿acaba de pasar a
+  // en curso?". La segunda dependía de comparar con `match.status`, y ese prop
+  // se refresca DENTRO de la acción (updateMatchAction llama a revalidatePath),
+  // así que al correr este efecto el partido ya figuraba en curso y la
+  // comparación daba falso: el prompt nunca aparecía. El once, en cambio, no
+  // cambia al guardar el partido, así que la decisión es estable.
+  const lineupCount = match?.currentTitularIds?.length ?? 0;
   useEffect(() => {
     if (state?.success) {
-      onSuccess({ becameLive: status === "IN_PROGRESS" && !wasLive });
+      onSuccess({ needsLineup: status === "IN_PROGRESS" && lineupCount === 0 });
     }
-  }, [state?.success, onSuccess, status, wasLive]);
+  }, [state?.success, onSuccess, status, lineupCount]);
 
   function handleDelete() {
     if (!match) return;
@@ -563,8 +569,8 @@ function MatchModalContent({
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(initialTab);
   /**
-   * El partido acaba de pasar a "en curso": en vez de cerrar, se ofrece cargar
-   * el once inicial ahí mismo, para no dejar a la usuaria buscando dónde seguir.
+   * El partido quedó en curso sin once inicial: en vez de cerrar, se ofrece
+   * cargarlo ahí mismo, para no dejar a la usuaria buscando dónde seguir.
    * Mientras está activo, el formulario se desmonta: si siguiera montado, su
    * efecto de éxito se volvería a disparar en cada refresh y esto se abriría en
    * bucle.
@@ -581,8 +587,8 @@ function MatchModalContent({
   }, [onClose, router]);
 
   const handleSaved = useCallback(
-    ({ becameLive }: { becameLive: boolean }) => {
-      if (becameLive && isEdit) {
+    ({ needsLineup }: { needsLineup: boolean }) => {
+      if (needsLineup && isEdit) {
         setAskOnce(true);
         router.refresh();
       } else {
