@@ -45,7 +45,6 @@ export async function createMatchAction(
     },
   });
 
-  revalidatePath("/admin/partidos");
   revalidatePath("/");
   return { success: "Partido creado correctamente." };
 }
@@ -102,7 +101,6 @@ export async function updateMatchAction(
     },
   });
 
-  revalidatePath("/admin/partidos");
   revalidatePath("/");
   return { success: "Partido actualizado." };
 }
@@ -111,46 +109,7 @@ export async function updateMatchAction(
 export async function deleteMatchAction(matchId: string) {
   await requireAdmin();
   await prisma.match.delete({ where: { id: matchId } });
-  revalidatePath("/admin/partidos");
   revalidatePath("/");
-}
-
-// ── Guardar once inicial ───────────────────────────────────────────────────
-// Recibe una lista de playerIds que son titulares; los demás quedan en false.
-export async function saveOnceInicialAction(
-  matchId: string,
-  titularIds: string[]
-): Promise<{ error?: string; success?: string }> {
-  await requireAdmin();
-
-  if (titularIds.length > 11) {
-    return { error: "El once inicial no puede tener más de 11 jugadoras." };
-  }
-
-  const match = await prisma.match.findUnique({
-    where: { id: matchId },
-    include: { players: true },
-  });
-
-  if (!match) return { error: "Partido no encontrado." };
-  if (match.status !== MatchStatus.IN_PROGRESS) {
-    return { error: "El once inicial solo se puede setear con el partido IN_PROGRESS." };
-  }
-
-  // Actualizar isTitular en bloque
-  await prisma.$transaction(
-    match.players.map((pm) =>
-      prisma.playerMatch.update({
-        where: { id: pm.id },
-        data: { isTitular: titularIds.includes(pm.userId) },
-      })
-    )
-  );
-
-  revalidatePath(`/admin/partidos/${matchId}/once`);
-  revalidatePath("/api/partidos/en-vivo");
-  revalidatePath("/");
-  return { success: "Once inicial guardado." };
 }
 
 // ── Setear titulares directamente desde la vista unificada ─────────────────
@@ -193,37 +152,6 @@ export async function setTitularesAction(
   revalidatePath("/");
   revalidatePath("/api/partidos/en-vivo");
   return { success: "Once inicial guardado." };
-}
-
-// ── Agregar jugadora a partido ─────────────────────────────────────────────
-export async function addPlayerToMatchAction(
-  matchId: string,
-  userId: string
-): Promise<{ error?: string }> {
-  await requireAdmin();
-
-  await prisma.playerMatch.upsert({
-    where: { userId_matchId: { userId, matchId } },
-    update: {},
-    create: { userId, matchId },
-  });
-
-  revalidatePath(`/admin/partidos/${matchId}/once`);
-  revalidatePath("/");
-  return {};
-}
-
-// ── Quitar jugadora de partido ─────────────────────────────────────────────
-export async function removePlayerFromMatchAction(
-  matchId: string,
-  userId: string
-): Promise<{ error?: string }> {
-  await requireAdmin();
-
-  await prisma.playerMatch.deleteMany({ where: { userId, matchId } });
-  revalidatePath(`/admin/partidos/${matchId}/once`);
-  revalidatePath("/");
-  return {};
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -360,8 +288,7 @@ export async function deleteEventAction(
     });
 
     revalidateLive();
-    revalidatePath("/admin/partidos");
-    return { success: "Incidencia eliminada." };
+      return { success: "Incidencia eliminada." };
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -444,8 +371,7 @@ export async function finishMatchAction(
     });
 
     revalidateLive();
-    revalidatePath("/admin/partidos");
-    return { success: "Partido finalizado." };
+      return { success: "Partido finalizado." };
   } catch (e) {
     return { error: (e as Error).message };
   }

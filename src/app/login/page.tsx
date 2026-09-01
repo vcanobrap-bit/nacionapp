@@ -12,7 +12,7 @@ export const metadata = { title: "Iniciar sesión · NacionApp" };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const session = await auth();
-  if (session) redirect("/admin");
+  if (session) redirect("/");
 
   const { callbackUrl, error } = await searchParams;
 

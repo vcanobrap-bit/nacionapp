@@ -1,13 +1,13 @@
 "use client";
 
-import { useActionState, useState, useEffect, useTransition, useCallback } from "react";
+import { useActionState, useEffect, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   createPlayerAction,
   updatePlayerAction,
   deletePlayerAction,
   type PlayerFormState,
-} from "@/app/admin/jugadoras/actions";
+} from "@/lib/actions/jugadoras";
 import type { PlayerData } from "@/app/page";
 
 // ── Shared styles ──────────────────────────────────────────────────────────
@@ -345,12 +345,12 @@ export default function PlayerModal({
   player?: PlayerData; // undefined = crear nueva
 }) {
   const router = useRouter();
-  const [formKey, setFormKey] = useState(0);
   const isEdit = !!player;
 
-  useEffect(() => {
-    if (isOpen) setFormKey((k) => k + 1);
-  }, [isOpen, player?.id]);
+  // El modal devuelve null al cerrarse, así que los formularios se desmontan
+  // y vuelven a montarse limpios en cada apertura. La key solo hace falta para
+  // resetear si se cambia de jugadora sin cerrar el modal.
+  const formKey = player?.id ?? "new";
 
   const handleSuccess = useCallback(() => {
     onClose();

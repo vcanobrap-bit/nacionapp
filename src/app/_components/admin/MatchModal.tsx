@@ -8,7 +8,7 @@ import {
   deleteMatchAction,
   setTitularesAction,
   type MatchFormState,
-} from "@/app/admin/partidos/actions";
+} from "@/lib/actions/partidos";
 import type { MatchData, PlayerData, TournamentData } from "@/app/page";
 
 // ── Shared styles ──────────────────────────────────────────────────────────
@@ -498,42 +498,49 @@ function OnceInicialPanel({
 // ════════════════════════════════════════════════════════════
 // MODAL PRINCIPAL
 // ════════════════════════════════════════════════════════════
-export default function MatchModal({
-  isOpen,
-  onClose,
-  match,
-  tournaments,
-  players,
-  initialTab = "partido",
-}: {
+type MatchModalProps = {
   isOpen: boolean;
   onClose: () => void;
   match?: MatchData;
   tournaments: TournamentData[];
   players: PlayerData[];
   initialTab?: Tab;
-}) {
+};
+
+/**
+ * Wrapper: monta el contenido solo cuando el modal está abierto, con una key
+ * derivada del partido y la pestaña inicial. Así todo el estado interno
+ * (pestaña activa, formulario) arranca limpio en cada apertura, sin necesidad
+ * de resetearlo desde un efecto.
+ */
+export default function MatchModal(props: MatchModalProps) {
+  if (!props.isOpen) return null;
+  return (
+    <MatchModalContent
+      key={`${props.match?.id ?? "new"}:${props.initialTab ?? "partido"}`}
+      {...props}
+    />
+  );
+}
+
+function MatchModalContent({
+  onClose,
+  match,
+  tournaments,
+  players,
+  initialTab = "partido",
+}: MatchModalProps) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(initialTab);
-  const [formKey, setFormKey] = useState(0);
 
   const isEdit = !!match;
   const isInProgress = match?.status === "IN_PROGRESS";
   const showOnceTab = isEdit && isInProgress;
 
-  useEffect(() => {
-    if (isOpen) {
-      setTab(initialTab);
-      setFormKey((k) => k + 1);
-    }
-  }, [isOpen, match?.id, initialTab]);
-
   const handleSuccess = useCallback(() => {
     onClose();
     router.refresh();
   }, [onClose, router]);
-
-  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -603,7 +610,6 @@ export default function MatchModal({
         <div className="overflow-y-auto flex-1 p-5">
           {tab === "partido" && (
             <PartidoForm
-              key={formKey}
               match={match}
               tournaments={tournaments}
               onSuccess={handleSuccess}

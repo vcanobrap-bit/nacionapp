@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { createAdminAction, type AdminFormState } from "@/app/admin/jugadoras/actions";
+import { createAdminAction, type AdminFormState } from "@/lib/actions/jugadoras";
 
 // ── Inner form ──────────────────────────────────────────────────────────────
 function AddAdminForm({ onSuccess }: { onSuccess: () => void }) {
