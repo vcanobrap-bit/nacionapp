@@ -36,7 +36,8 @@ function PartidoForm({
 }: {
   match?: MatchData;
   tournaments: TournamentData[];
-  onSuccess: () => void;
+  /** `becameLive`: el partido acaba de pasar a "en curso" (no lo estaba antes). */
+  onSuccess: (info: { becameLive: boolean }) => void;
   onDeleteSuccess: () => void;
 }) {
   const action = match ? updateMatchAction : createMatchAction;
@@ -49,9 +50,12 @@ function PartidoForm({
   );
   const [deleting, startDelete] = useTransition();
 
+  const wasLive = match?.status === "IN_PROGRESS";
   useEffect(() => {
-    if (state?.success) onSuccess();
-  }, [state?.success, onSuccess]);
+    if (state?.success) {
+      onSuccess({ becameLive: status === "IN_PROGRESS" && !wasLive });
+    }
+  }, [state?.success, onSuccess, status, wasLive]);
 
   function handleDelete() {
     if (!match) return;
@@ -326,10 +330,13 @@ function OnceInicialPanel({
   matchId,
   players,
   currentTitularIds,
+  onSaved,
 }: {
   matchId: string;
   players: PlayerData[];
   currentTitularIds: string[];
+  /** Se llama tras guardar con éxito: la app lleva al inicio a ver la tarjeta en vivo. */
+  onSaved: () => void;
 }) {
   const router = useRouter();
   const [titulares, setTitulares] = useState<Set<string>>(
@@ -364,8 +371,8 @@ function OnceInicialPanel({
       if (result.error) {
         setMsg({ type: "error", text: result.error });
       } else {
-        setMsg({ type: "success", text: result.success ?? "Once guardado." });
         router.refresh();
+        onSaved();
       }
     });
   }
@@ -521,6 +528,8 @@ function OnceInicialPanel({
 type MatchModalProps = {
   isOpen: boolean;
   onClose: () => void;
+  /** Tras guardar el once: cerrar y llevar al inicio, donde está la tarjeta en vivo. */
+  onLineupSaved: () => void;
   match?: MatchData;
   tournaments: TournamentData[];
   players: PlayerData[];
@@ -545,6 +554,7 @@ export default function MatchModal(props: MatchModalProps) {
 
 function MatchModalContent({
   onClose,
+  onLineupSaved,
   match,
   tournaments,
   players,
@@ -552,15 +562,35 @@ function MatchModalContent({
 }: MatchModalProps) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(initialTab);
+  /**
+   * El partido acaba de pasar a "en curso": en vez de cerrar, se ofrece cargar
+   * el once inicial ahí mismo, para no dejar a la usuaria buscando dónde seguir.
+   * Mientras está activo, el formulario se desmonta: si siguiera montado, su
+   * efecto de éxito se volvería a disparar en cada refresh y esto se abriría en
+   * bucle.
+   */
+  const [askOnce, setAskOnce] = useState(false);
 
   const isEdit = !!match;
   const isInProgress = match?.status === "IN_PROGRESS";
   const showOnceTab = isEdit && isInProgress;
 
-  const handleSuccess = useCallback(() => {
+  const closeAndRefresh = useCallback(() => {
     onClose();
     router.refresh();
   }, [onClose, router]);
+
+  const handleSaved = useCallback(
+    ({ becameLive }: { becameLive: boolean }) => {
+      if (becameLive && isEdit) {
+        setAskOnce(true);
+        router.refresh();
+      } else {
+        closeAndRefresh();
+      }
+    },
+    [isEdit, router, closeAndRefresh]
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -601,7 +631,7 @@ function MatchModalContent({
         </div>
 
         {/* Tabs — solo cuando IN_PROGRESS en modo edición */}
-        {showOnceTab && (
+        {showOnceTab && !askOnce && (
           <div className="flex px-5 gap-2 pb-3 border-b border-white/[0.06] shrink-0">
             <button
               onClick={() => setTab("partido")}
@@ -628,19 +658,51 @@ function MatchModalContent({
 
         {/* Content — scrollable */}
         <div className="overflow-y-auto flex-1 p-5">
-          {tab === "partido" && (
+          {askOnce && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-5 text-center">
+                <p className="text-2xl mb-2">🏟️</p>
+                <h3 className="text-base font-semibold text-white leading-snug">
+                  El partido quedó en previa
+                </h3>
+                <p className="text-sm text-slate-400 mt-2 leading-relaxed">
+                  ¿Quieres cargar el once inicial ahora? Así queda publicado
+                  antes del pitazo y el reloj arranca desde la tarjeta en vivo.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAskOnce(false);
+                  setTab("once");
+                }}
+                className="w-full rounded-full bg-emerald-500 hover:bg-emerald-400 text-white font-semibold text-sm py-3 transition-all"
+              >
+                ⚽ Cargar el once inicial
+              </button>
+              <button
+                type="button"
+                onClick={closeAndRefresh}
+                className="w-full text-xs text-slate-500 hover:text-slate-300 transition-colors py-1"
+              >
+                Completar después
+              </button>
+            </div>
+          )}
+          {tab === "partido" && !askOnce && (
             <PartidoForm
               match={match}
               tournaments={tournaments}
-              onSuccess={handleSuccess}
-              onDeleteSuccess={handleSuccess}
+              onSuccess={handleSaved}
+              onDeleteSuccess={closeAndRefresh}
             />
           )}
-          {tab === "once" && match && (
+          {tab === "once" && !askOnce && match && (
             <OnceInicialPanel
               matchId={match.id}
               players={players}
               currentTitularIds={match.currentTitularIds ?? []}
+              onSaved={onLineupSaved}
             />
           )}
         </div>
