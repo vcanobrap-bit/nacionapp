@@ -13,7 +13,8 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "postinstall": "prisma generate",
-    "test:clock": "tsx src/lib/clock.test.ts"
+    "test:clock": "tsx src/lib/clock.test.ts",
+    "test:standings": "tsx src/lib/standings.test.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

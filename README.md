@@ -53,6 +53,7 @@ npm run db:seed      # Poblar con datos de ejemplo
 npm run db:studio    # Prisma Studio
 npm run lint         # ESLint
 npm run test:clock   # Verifica la lógica del reloj del partido
+npm run test:standings # Verifica el parser de la tabla oficial
 ```
 
 ## Estructura

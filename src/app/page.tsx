@@ -94,6 +94,15 @@ export interface LiveMatchData {
   convocadas?: LiveMatchConvocada[];
 }
 
+/** Tabla oficial de la asociación: el snapshot más reciente de un torneo. */
+export interface StandingsData {
+  id: string;
+  tournamentId: string;
+  tournamentName: string;
+  asOf: string; // ISO, medianoche UTC
+  rows: { position: number; teamName: string; points: number }[];
+}
+
 export interface StatsData {
   pj: number;           // Partidos jugados (FINISHED)
   v: number;            // Victorias
@@ -112,8 +121,8 @@ export interface StatsData {
 // La pestaña vive en `?tab=`: así el servidor renderiza la correcta de entrada
 // (sin parpadeo), un refresh no te devuelve a Posiciones, y un enlace puede
 // apuntar a una pestaña concreta — p. ej. "‹ Plantel" desde la ficha de jugadora.
-export type Tab = "posiciones" | "partidos" | "plantel";
-const TABS: readonly Tab[] = ["posiciones", "partidos", "plantel"];
+export type Tab = "posiciones" | "tabla" | "partidos" | "plantel";
+const TABS: readonly Tab[] = ["posiciones", "tabla", "partidos", "plantel"];
 function parseTab(raw: string | undefined): Tab {
   return (TABS as readonly string[]).includes(raw ?? "") ? (raw as Tab) : "posiciones";
 }
@@ -127,7 +136,7 @@ export default async function HomePage({
   const { tab } = await searchParams;
   const initialTab = parseTab(tab);
 
-  const [rawMatches, rawPlayers, rawTournaments] = await Promise.all([
+  const [rawMatches, rawPlayers, rawTournaments, rawStandings] = await Promise.all([
     prisma.match.findMany({
       orderBy: { date: "asc" },
       include: {
@@ -153,7 +162,30 @@ export default async function HomePage({
     prisma.tournament.findMany({
       orderBy: [{ year: "desc" }, { name: "asc" }],
     }),
+    // Tablas oficiales: más reciente primero; abajo se queda una por torneo
+    prisma.standingsSnapshot.findMany({
+      orderBy: [{ asOf: "desc" }, { createdAt: "desc" }],
+      include: {
+        rows: { orderBy: { position: "asc" } },
+        tournament: { select: { name: true } },
+      },
+    }),
   ]);
+
+  // Una tabla por torneo: la publicación más reciente
+  const standings: StandingsData[] = [];
+  const vistos = new Set<string>();
+  for (const s of rawStandings) {
+    if (vistos.has(s.tournamentId)) continue;
+    vistos.add(s.tournamentId);
+    standings.push({
+      id: s.id,
+      tournamentId: s.tournamentId,
+      tournamentName: s.tournament.name,
+      asOf: s.asOf.toISOString(),
+      rows: s.rows.map((r) => ({ position: r.position, teamName: r.teamName, points: r.points })),
+    });
+  }
 
   // Serializar matches
   const matches: MatchData[] = rawMatches.map((m) => {
@@ -350,6 +382,7 @@ export default async function HomePage({
       matches={adminMatches}
       players={adminPlayers}
       tournaments={tournaments}
+      standings={standings}
       adminEmail={adminEmail}
       liveMatch={liveMatch}
     />
