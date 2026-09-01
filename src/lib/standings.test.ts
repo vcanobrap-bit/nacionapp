@@ -1,4 +1,4 @@
-import { parseStandingsText, isOurTeam, formatAsOf } from "./standings";
+import { parseStandingsText, isOurTeam, formatAsOf, sortByPoints } from "./standings";
 
 let fallos = 0;
 function chk(nombre: string, real: unknown, esperado: unknown) {
@@ -28,9 +28,17 @@ chk("Tabla completa: posiciones 1,2,3 en orden de publicación",
   parseStandingsText(tabla).rows, [r(1, "Nacional", 45), r(2, "Arturo Prat", 42), r(3, "Deportivo Lota", 38)]);
 chk("Sin errores en una tabla bien escrita", parseStandingsText(tabla).errors, []);
 
-// ── El orden NO se recalcula por puntos: se respeta el de la asociación ──
-chk("Puntos desordenados se respetan tal cual (desempates desconocidos)",
-  parseStandingsText("Naval 30\nNacional 45").rows, [r(1, "Naval", 30), r(2, "Nacional", 45)]);
+// ── Se ordena por puntos de mayor a menor, pase lo que pase con el pegado ──
+chk("Puntos desordenados → se reordenan de mayor a menor",
+  parseStandingsText("Naval 30\nNacional 45").rows, [r(1, "Nacional", 45), r(2, "Naval", 30)]);
+chk("Empate en puntos conserva el orden de pegado (sort estable)",
+  parseStandingsText("Naval 30\nLota 30\nNacional 45").rows,
+  [r(1, "Nacional", 45), r(2, "Naval", 30), r(3, "Lota", 30)]);
+chk("Un '1.' pegado delante no manda: la posición la dan los puntos",
+  parseStandingsText("1. Naval 30\n2. Nacional 45").rows, [r(1, "Nacional", 45), r(2, "Naval", 30)]);
+chk("sortByPoints no muta el original",
+  (() => { const o = [{ points: 1 }, { points: 9 }]; sortByPoints(o); return o; })(),
+  [{ points: 1 }, { points: 9 }]);
 
 // ── Líneas que no se entienden se reportan con su número ──
 const conError = parseStandingsText("Nacional 45\nEsta línea no tiene puntos\nNaval 30");

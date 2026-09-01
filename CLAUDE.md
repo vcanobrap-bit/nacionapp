@@ -240,8 +240,10 @@ previsualización que usa el **mismo parser** que el servidor
 
 - Cada carga es un `StandingsSnapshot` completo con sus `StandingsRow`. No se
   edita: se guarda historial y la app muestra **el más reciente por torneo**.
-- `position` es el orden en que la asociación publica, **no** se recalcula por
-  puntos: la tabla oficial puede tener desempates que no conocemos.
+- La tabla se **ordena por puntos de mayor a menor** con `sortByPoints`, la única
+  regla de orden: la usan el parser (previsualización y guardado) y la
+  serialización en `page.tsx`, así vale también para snapshots cargados antes.
+  Empates conservan el orden de carga (sort estable).
 - `asOf` es la fecha de la tabla según la asociación (no la de carga). Va en
   el disclaimer "Actualizada al …", que deja claro que no es en vivo.
 - Nuestra fila se resalta con `isOurTeam()` (contiene "nacional").

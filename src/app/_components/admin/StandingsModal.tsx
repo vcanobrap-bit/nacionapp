@@ -74,7 +74,7 @@ function StandingsForm({
 
       <div>
         <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
-          Equipos y puntos <span className="text-slate-600 normal-case tracking-normal">— uno por línea, en el orden de la tabla</span>
+          Equipos y puntos <span className="text-slate-600 normal-case tracking-normal">— uno por línea; se ordenan solos por puntos</span>
         </label>
         <textarea
           name="text"

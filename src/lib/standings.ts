@@ -20,13 +20,25 @@ export interface ParsedStandings {
 }
 
 /**
+ * Orden de la tabla: puntos de mayor a menor. `Array.sort` es estable, así
+ * que los empates conservan el orden en que se cargaron — que es el único
+ * desempate que conocemos (el de la asociación).
+ *
+ * Es la ÚNICA regla de orden y la usan el parser (previsualización y
+ * guardado) y la serialización en page.tsx (para que valga también en
+ * snapshots cargados antes de que existiera).
+ */
+export function sortByPoints<T extends { points: number }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => b.points - a.points);
+}
+
+/**
  * Acepta "Equipo 45", "3. Equipo 45", "3) Equipo 45", "Equipo 45 pts".
- * La posición NO se recalcula ordenando por puntos: se respeta el orden en
- * que la asociación publica la tabla, que puede tener desempates que no
- * conocemos. La posición es simplemente el número de fila.
+ * Un número de posición al inicio de la línea se ignora: la posición final
+ * la da el orden por puntos (ver `sortByPoints`), no lo que se pegó.
  */
 export function parseStandingsText(text: string): ParsedStandings {
-  const rows: ParsedStandingsRow[] = [];
+  const leidas: { teamName: string; points: number }[] = [];
   const errors: ParsedStandings["errors"] = [];
 
   text.split(/\r?\n/).forEach((raw, i) => {
@@ -39,9 +51,13 @@ export function parseStandingsText(text: string): ParsedStandings {
       errors.push({ line: i + 1, text: line });
       return;
     }
-    rows.push({ position: rows.length + 1, teamName: m[1].trim(), points: parseInt(m[2], 10) });
+    leidas.push({ teamName: m[1].trim(), points: parseInt(m[2], 10) });
   });
 
+  const rows: ParsedStandingsRow[] = sortByPoints(leidas).map((r, i) => ({
+    position: i + 1,
+    ...r,
+  }));
   return { rows, errors };
 }
 
