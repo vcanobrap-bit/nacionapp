@@ -100,11 +100,10 @@ function PencilIcon() {
 
 // ── Main component ────────────────────────────────────────
 export default function AppShell({
-  matches, players, stats, tournaments, adminEmail, liveMatch,
+  matches, players, tournaments, adminEmail, liveMatch,
 }: {
   matches: MatchData[];
   players: PlayerData[];
-  stats: StatsData;
   tournaments: TournamentData[];
   adminEmail: string | null;
   liveMatch: LiveMatchData | null;
@@ -155,11 +154,6 @@ export default function AppShell({
   const filteredMatches = selectedTournamentId
     ? matches.filter((m) => m.tournamentId === selectedTournamentId)
     : matches;
-
-  // Stats sobre el subset filtrado (rápido cliente-side)
-  const filteredStats = selectedTournamentId
-    ? computeStatsFromMatches(filteredMatches)
-    : stats;
 
   // Próximo partido en el subset filtrado.
   // Los reagendados (POSTPONED) no cuentan: no tienen fecha confirmada.
@@ -221,7 +215,7 @@ export default function AppShell({
                   NacionApp
                 </h1>
                 <p className="text-[11px] text-slate-200/90 font-semibold tracking-widest uppercase mt-1.5 drop-shadow-[0_1px_6px_rgba(0,0,0,0.95)]">
-                  Equipo Nacional · Femenino 🔴🔵
+                  Equipo Nacional · Femenino ⚪🔴🔵
                 </p>
               </div>
             </div>
@@ -299,7 +293,8 @@ export default function AppShell({
 
         {tab === "posiciones" && (
           <PosicionesTab
-            stats={filteredStats}
+            matches={filteredMatches}
+            tournaments={tournaments}
             nextMatch={nextMatch}
             hasLive={hasLive}
             liveMatch={liveMatch}
@@ -309,6 +304,7 @@ export default function AppShell({
         {tab === "partidos" && (
           <PartidosTab
             matches={filteredMatches}
+            tournaments={tournaments}
             isAdmin={isAdmin}
             onAddMatch={openNewMatch}
             onEditMatch={openEditMatch}
@@ -328,7 +324,7 @@ export default function AppShell({
       {/* ── Footer ──────────────────────────────────────── */}
       <footer className="relative z-10 border-t border-white/[0.06] py-6 text-center">
         <p className="text-xs text-slate-600">
-          © {new Date().getFullYear()} NacionApp · Nacional Femenino - 🔴🔵
+          © {new Date().getFullYear()} NacionApp · Nacional Femenino - ⚪🔴🔵
         </p>
       </footer>
 
@@ -392,12 +388,14 @@ function ProximoPartidoCard({ match }: { match: MatchData }) {
 
         <div className="pointer-events-none absolute -right-10 -top-10 w-40 h-40 rounded-full bg-sky-500/[0.07] blur-2xl" />
 
-        <div className="flex items-center justify-between mb-4 relative">
-          <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-sky-400/50">
+        {/* En móvil se apilan: así el nombre del torneo usa todo el ancho y
+            envuelve en dos líneas en vez de cortarse. */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 sm:gap-3 mb-4 relative">
+          <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-sky-400/50 shrink-0">
             Próximo partido
           </p>
           {(match.tournamentName || match.round != null || match.fixtureRoundNumber != null) && (
-            <p className="text-[10px] text-slate-500 text-right">
+            <p className="text-[10px] text-slate-500 leading-snug min-w-0 sm:text-right">
               {match.tournamentName ?? ""}
               {match.round != null ? ` · R${match.round}` : ""}
               {match.fixtureRoundNumber != null ? ` · Fecha ${match.fixtureRoundNumber}` : ""}
@@ -444,83 +442,281 @@ function ProximoPartidoCard({ match }: { match: MatchData }) {
 }
 
 // ════════════════════════════════════════════════════════════
+// AGRUPACIÓN JERÁRQUICA — Torneo › Rueda › Partido
+// ════════════════════════════════════════════════════════════
+
+/**
+ * Estado de una rueda, que define cómo se muestra y si arranca desplegada:
+ *  - `live`      → tiene un partido en curso
+ *  - `current`   → arrancó pero no terminó (mezcla de jugados y pendientes)
+ *  - `next`      → todavía no arrancó, pero una rueda anterior sigue con
+ *                  fechas pendientes. Es la "próxima rueda": el fixture ya
+ *                  existe aunque la rueda en curso no haya cerrado.
+ *  - `upcoming`  → todavía no arrancó y no es la inmediata siguiente
+ *  - `finished`  → todos sus partidos están jugados
+ */
+type RoundState = "live" | "current" | "next" | "upcoming" | "finished";
+
+interface RoundGroup {
+  round: number | null; // null = partidos sin rueda asignada
+  matches: MatchData[];
+  state: RoundState;
+}
+
+interface TournamentGroup {
+  id: string | null; // null = partidos sin campeonato
+  name: string;
+  rounds: RoundGroup[];
+  matches: MatchData[];
+  isFinished: boolean;
+}
+
+// Dentro de una rueda: el partido en curso primero, luego del más reciente
+// al más antiguo.
+function sortMatchesInRound(ms: MatchData[]): MatchData[] {
+  return [...ms].sort((a, b) => {
+    const liveA = a.status === "IN_PROGRESS" ? 0 : 1;
+    const liveB = b.status === "IN_PROGRESS" ? 0 : 1;
+    if (liveA !== liveB) return liveA - liveB;
+    return new Date(b.date).getTime() - new Date(a.date).getTime();
+  });
+}
+
+function groupByTournament(
+  matches: MatchData[],
+  tournaments: TournamentData[]
+): TournamentGroup[] {
+  const byTournament = new Map<string | null, MatchData[]>();
+  for (const m of matches) {
+    const key = m.tournamentId ?? null;
+    if (!byTournament.has(key)) byTournament.set(key, []);
+    byTournament.get(key)!.push(m);
+  }
+
+  const groups: TournamentGroup[] = [];
+
+  for (const [tournamentId, tMatches] of byTournament) {
+    // ── Agrupar por rueda ──
+    const byRound = new Map<number | null, MatchData[]>();
+    for (const m of tMatches) {
+      const key = m.round ?? null;
+      if (!byRound.has(key)) byRound.set(key, []);
+      byRound.get(key)!.push(m);
+    }
+
+    // Ruedas numeradas en orden ascendente; las sin rueda van al final
+    const roundKeys = Array.from(byRound.keys()).sort((a, b) => {
+      if (a === null) return 1;
+      if (b === null) return -1;
+      return a - b;
+    });
+
+    const rounds: RoundGroup[] = roundKeys.map((round) => {
+      const rMatches = sortMatchesInRound(byRound.get(round)!);
+      const hasLive = rMatches.some((m) => m.status === "IN_PROGRESS");
+      const allFinished = rMatches.every((m) => m.status === "FINISHED");
+      const notStarted = !rMatches.some(
+        (m) => m.status === "FINISHED" || m.status === "IN_PROGRESS"
+      );
+
+      const state: RoundState = hasLive
+        ? "live"
+        : allFinished
+        ? "finished"
+        : notStarted
+        ? "upcoming" // se ajusta abajo a "next" si corresponde
+        : "current";
+
+      return { round, matches: rMatches, state };
+    });
+
+    // La primera rueda sin arrancar es la "próxima" solo si alguna rueda
+    // anterior sigue abierta; si todas las anteriores terminaron, entonces
+    // esa rueda es en realidad la actual.
+    const firstNotStarted = rounds.findIndex((r) => r.state === "upcoming");
+    if (firstNotStarted !== -1) {
+      const anteriorAbierta = rounds
+        .slice(0, firstNotStarted)
+        .some((r) => r.state !== "finished");
+      rounds[firstNotStarted].state = anteriorAbierta ? "next" : "current";
+    }
+
+    groups.push({
+      id: tournamentId,
+      name:
+        tournaments.find((t) => t.id === tournamentId)?.name ??
+        tMatches.find((m) => m.tournamentName)?.tournamentName ??
+        "Sin campeonato",
+      rounds,
+      matches: tMatches,
+      isFinished: tMatches.every((m) => m.status === "FINISHED"),
+    });
+  }
+
+  // Campeonatos en curso primero; los partidos sin campeonato, al final
+  return groups.sort((a, b) => {
+    if (a.id === null) return 1;
+    if (b.id === null) return -1;
+    if (a.isFinished !== b.isFinished) return a.isFinished ? 1 : -1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+/** La rueda que "manda" en un campeonato: la primera sin terminar, o la última. */
+function currentRound(rounds: RoundGroup[]): RoundGroup | null {
+  return rounds.find((r) => r.state !== "finished") ?? rounds[rounds.length - 1] ?? null;
+}
+
+function roundLabel(round: number | null): string {
+  return round == null ? "Sin rueda" : `Rueda ${round}`;
+}
+
+// ── Chevron de desplegable ────────────────────────────────
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+      className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${
+        open ? "rotate-180" : ""
+      }`}
+    >
+      <path
+        d="M4 6l4 4 4-4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
 // TAB 1 — POSICIONES
 // ════════════════════════════════════════════════════════════
 function PosicionesTab({
-  stats,
+  matches,
+  tournaments,
   nextMatch,
   hasLive,
   liveMatch,
   isAdmin,
 }: {
-  stats: StatsData;
+  matches: MatchData[];
+  tournaments: TournamentData[];
   nextMatch: MatchData | null;
   hasLive: boolean;
   liveMatch: LiveMatchData | null;
   isAdmin: boolean;
 }) {
-  const dif = stats.gf - stats.gc;
+  const groups = groupByTournament(matches, tournaments);
 
   return (
     <div className="space-y-3">
-
       {/* Tarjeta en vivo — prioritaria cuando hay partido en curso */}
-      {liveMatch && (
-        <LiveMatchCard match={liveMatch} isAdmin={isAdmin} />
-      )}
+      {liveMatch && <LiveMatchCard match={liveMatch} isAdmin={isAdmin} />}
 
       {nextMatch && !hasLive && <ProximoPartidoCard match={nextMatch} />}
 
-      {/* Hero — puntos ganados */}
-      <div className="p-px rounded-2xl bg-gradient-to-br from-blue-500/25 to-white/[0.03]">
-        <div className="rounded-[15px] bg-gradient-to-br from-[#0F1E35] to-[#080D16] p-5">
-          <p className="text-xs font-semibold text-blue-400/70 uppercase tracking-widest mb-1">
-            Puntos ganados
-          </p>
-          <p className="text-6xl font-semibold leading-none tracking-tight">
-            {stats.ptsGanados}
-          </p>
-          <p className="text-slate-500 text-sm mt-1.5">
-            en {stats.pj} partido{stats.pj !== 1 ? "s" : ""} jugado{stats.pj !== 1 ? "s" : ""}
-          </p>
+      {/* Un bloque de puntos por campeonato: los puntos de torneos
+          distintos no se suman nunca entre sí. */}
+      {groups.map((g) => (
+        <TournamentPoints key={g.id ?? "sin-campeonato"} group={g} />
+      ))}
 
-          {stats.ptsIdeales > 0 && (
-            <div className="mt-4">
-              <div className="flex justify-between items-center mb-1.5">
-                <p className="text-xs text-slate-600">Progreso hacia el ideal</p>
-                <p className="text-xs font-semibold text-blue-400">
-                  {Math.round((stats.ptsGanados / stats.ptsIdeales) * 100)}%
-                </p>
+      {matches.length === 0 && (
+        <EmptyState message="No hay partidos registrados todavía." />
+      )}
+    </div>
+  );
+}
+
+/** Puntos de un campeonato: la rueda actual arriba, el total del torneo abajo. */
+function TournamentPoints({ group }: { group: TournamentGroup }) {
+  const round = currentRound(group.rounds);
+  const roundStats = round ? computeStatsFromMatches(round.matches) : null;
+  const totalStats = computeStatsFromMatches(group.matches);
+  const dif = totalStats.gf - totalStats.gc;
+
+  const pct =
+    roundStats && roundStats.ptsIdeales > 0
+      ? Math.round((roundStats.ptsGanados / roundStats.ptsIdeales) * 100)
+      : 0;
+
+  return (
+    <div className="space-y-2 pt-2">
+      {/* ── Hero: puntos de la rueda actual ── */}
+      {roundStats && round && (
+        <div className="p-px rounded-2xl bg-gradient-to-br from-blue-500/25 to-white/[0.03]">
+          <div className="rounded-[15px] bg-gradient-to-br from-[#0F1E35] to-[#080D16] p-5">
+            <p className="text-xs font-semibold text-blue-400/70 uppercase tracking-widest">
+              {roundLabel(round.round)}
+            </p>
+            <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+              {group.name}
+            </p>
+
+            <p className="text-6xl font-semibold leading-none tracking-tight mt-3">
+              {roundStats.ptsGanados}
+            </p>
+            <p className="text-slate-500 text-sm mt-1.5">
+              punto{roundStats.ptsGanados !== 1 ? "s" : ""} en {roundStats.pj}{" "}
+              partido{roundStats.pj !== 1 ? "s" : ""} jugado
+              {roundStats.pj !== 1 ? "s" : ""}
+            </p>
+
+            {roundStats.ptsIdeales > 0 && (
+              <div className="mt-4">
+                <div className="flex justify-between items-center mb-1.5">
+                  <p className="text-xs text-slate-600">
+                    Progreso hacia el ideal de la rueda
+                  </p>
+                  <p className="text-xs font-semibold text-blue-400">{pct}%</p>
+                </div>
+                <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all duration-700"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
               </div>
-              <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all duration-700"
-                  style={{ width: `${Math.round((stats.ptsGanados / stats.ptsIdeales) * 100)}%` }}
-                />
-              </div>
-            </div>
-          )}
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Total del campeonato — la cuenta que realmente importa ── */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">
+            Total del campeonato
+          </p>
+          <p className="text-xs text-slate-400 mt-0.5 leading-snug truncate">
+            {group.name}
+          </p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-2xl font-semibold text-white leading-none">
+            {totalStats.ptsGanados}
+            <span className="text-xs text-slate-600 font-normal ml-1">pts</span>
+          </p>
+          <p className="text-[10px] text-slate-500 mt-1">
+            {totalStats.pj} jugado{totalStats.pj !== 1 ? "s" : ""} ·{" "}
+            {totalStats.ptsIdeales} ideal
+          </p>
         </div>
       </div>
 
-      {/* Mini stats */}
-      <div className="grid grid-cols-3 gap-2">
-        <MiniStat label="Ganados"    value={stats.ptsGanados}          sub={`${stats.pj} jugados`}             color="text-blue-400"    />
-        <MiniStat label="Pendientes" value={`+${stats.ptsPendientes}`}  sub={`${stats.pendingCount} por jugar`} color="text-amber-400"   />
-        <MiniStat label="Ideal"      value={stats.ptsIdeales}           sub="máximo posible"                    color="text-emerald-400" />
-      </div>
-
-      {/* Rendimiento */}
+      {/* ── Rendimiento del campeonato ── */}
       <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-        <p className="text-xs font-semibold uppercase tracking-widest text-slate-600 mb-4">
-          Rendimiento
-        </p>
         <div className="grid grid-cols-4 gap-3 text-center mb-4">
           {[
-            { label: "PJ", value: stats.pj, color: "text-white"       },
-            { label: "V",  value: stats.v,  color: "text-emerald-400" },
-            { label: "E",  value: stats.e,  color: "text-amber-400"   },
-            { label: "D",  value: stats.d,  color: "text-rose-400"    },
+            { label: "PJ", value: totalStats.pj, color: "text-white" },
+            { label: "V", value: totalStats.v, color: "text-emerald-400" },
+            { label: "E", value: totalStats.e, color: "text-amber-400" },
+            { label: "D", value: totalStats.d, color: "text-rose-400" },
           ].map(({ label, value, color }) => (
             <div key={label}>
               <p className={`text-2xl font-semibold ${color}`}>{value}</p>
@@ -531,12 +727,13 @@ function PosicionesTab({
 
         <div className="grid grid-cols-3 gap-2 text-center border-t border-white/[0.06] pt-3">
           {[
-            { label: "Goles a favor",   value: stats.gf, color: "text-white" },
-            { label: "Goles en contra", value: stats.gc, color: "text-white" },
+            { label: "Goles a favor", value: totalStats.gf, color: "text-white" },
+            { label: "Goles en contra", value: totalStats.gc, color: "text-white" },
             {
               label: "Diferencia",
               value: dif >= 0 ? `+${dif}` : dif,
-              color: dif > 0 ? "text-emerald-400" : dif < 0 ? "text-rose-400" : "text-white",
+              color:
+                dif > 0 ? "text-emerald-400" : dif < 0 ? "text-rose-400" : "text-white",
             },
           ].map(({ label, value, color }) => (
             <div key={label}>
@@ -546,24 +743,6 @@ function PosicionesTab({
           ))}
         </div>
       </div>
-
-      {stats.pj === 0 && stats.pendingCount === 0 && (
-        <EmptyState message="No hay partidos registrados todavía." />
-      )}
-    </div>
-  );
-}
-
-function MiniStat({
-  label, value, sub, color,
-}: {
-  label: string; value: string | number; sub: string; color: string;
-}) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-center">
-      <p className={`text-2xl font-semibold ${color}`}>{value}</p>
-      <p className="text-xs font-medium text-white mt-0.5">{label}</p>
-      <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">{sub}</p>
     </div>
   );
 }
@@ -571,31 +750,16 @@ function MiniStat({
 // ════════════════════════════════════════════════════════════
 // TAB 2 — PARTIDOS
 // ════════════════════════════════════════════════════════════
-const STATUS_PRIORITY: Record<string, number> = {
-  IN_PROGRESS: 0,
-  PENDING: 1,
-  POSTPONED: 2,
-  FINISHED: 3,
-};
-
-function sortGroup(ms: MatchData[]): MatchData[] {
-  return [...ms].sort((a, b) => {
-    const sp = (STATUS_PRIORITY[a.status] ?? 1) - (STATUS_PRIORITY[b.status] ?? 1);
-    if (sp !== 0) return sp;
-    const fn = (a.fixtureRoundNumber ?? 999) - (b.fixtureRoundNumber ?? 999);
-    if (fn !== 0) return fn;
-    return new Date(a.date).getTime() - new Date(b.date).getTime();
-  });
-}
-
 function PartidosTab({
   matches,
+  tournaments,
   isAdmin,
   onAddMatch,
   onEditMatch,
   onCompleteOnce,
 }: {
   matches: MatchData[];
+  tournaments: TournamentData[];
   isAdmin: boolean;
   onAddMatch: () => void;
   onEditMatch: (m: MatchData) => void;
@@ -605,21 +769,10 @@ function PartidosTab({
     return <EmptyState message="No hay partidos en este campeonato todavía." />;
   }
 
-  const usesRounds = matches.some((m) => m.round != null);
-
-  const renderCards = (ms: MatchData[]) =>
-    ms.map((m) => (
-      <MatchCard
-        key={m.id}
-        match={m}
-        isAdmin={isAdmin}
-        onEdit={() => onEditMatch(m)}
-        onCompleteOnce={() => onCompleteOnce(m)}
-      />
-    ));
+  const groups = groupByTournament(matches, tournaments);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* ── Botón mágico: Agregar partido ─── */}
       {isAdmin && (
         <div className="flex justify-end">
@@ -638,74 +791,165 @@ function PartidosTab({
         <EmptyState message="No hay partidos todavía. Creá el primero." />
       )}
 
-      {usesRounds ? (
-        (() => {
-          const roundsMap = new Map<number, MatchData[]>();
-          const noRound: MatchData[] = [];
-          for (const m of matches) {
-            if (m.round != null) {
-              if (!roundsMap.has(m.round)) roundsMap.set(m.round, []);
-              roundsMap.get(m.round)!.push(m);
-            } else {
-              noRound.push(m);
-            }
-          }
-          const sortedRounds = Array.from(roundsMap.entries()).sort(([a], [b]) => a - b);
+      {groups.map((g) => (
+        <TournamentSection
+          key={g.id ?? "sin-campeonato"}
+          group={g}
+          isAdmin={isAdmin}
+          onEditMatch={onEditMatch}
+          onCompleteOnce={onCompleteOnce}
+        />
+      ))}
+    </div>
+  );
+}
 
-          return (
-            <div className="space-y-8">
-              {sortedRounds.map(([round, roundMatches]) => (
-                <div key={round}>
-                  <div className="flex items-center gap-3 mb-3">
-                    <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                      Rueda {round}
-                    </p>
-                    <div className="flex-1 h-px bg-white/[0.07]" />
-                    <p className="text-[10px] text-slate-600">
-                      {roundMatches.length} {roundMatches.length === 1 ? "partido" : "partidos"}
-                    </p>
-                  </div>
-                  <div className="space-y-3">{renderCards(sortGroup(roundMatches))}</div>
-                </div>
-              ))}
-              {noRound.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-3 mb-3">
-                    <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Sin rueda</p>
-                    <div className="flex-1 h-px bg-white/[0.07]" />
-                  </div>
-                  <div className="space-y-3">{renderCards(sortGroup(noRound))}</div>
-                </div>
-              )}
-            </div>
-          );
-        })()
-      ) : (
-        (() => {
-          const live      = matches.filter((m) => m.status === "IN_PROGRESS");
-          const pending   = [...matches.filter((m) => m.status === "PENDING")]
-            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-          const postponed = matches.filter((m) => m.status === "POSTPONED");
-          const finished  = [...matches.filter((m) => m.status === "FINISHED")]
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          const sorted = [...live, ...pending, ...postponed, ...finished];
+// ── Nivel 1: Campeonato ───────────────────────────────────
+function TournamentSection({
+  group,
+  isAdmin,
+  onEditMatch,
+  onCompleteOnce,
+}: {
+  group: TournamentGroup;
+  isAdmin: boolean;
+  onEditMatch: (m: MatchData) => void;
+  onCompleteOnce: (m: MatchData) => void;
+}) {
+  // Un campeonato en curso arranca desplegado; uno terminado, contraído.
+  const [open, setOpen] = useState(!group.isFinished);
 
-          return (
-            <div className="space-y-3">
-              {pending.length > 0 && live.length === 0 && (
-                <p className="text-xs font-semibold text-slate-600 uppercase tracking-widest pb-1">
-                  Próximo — {formatDate(pending[0].date, { weekday: "long", day: "numeric", month: "long" })}
-                </p>
-              )}
-              {renderCards(sorted)}
-            </div>
-          );
-        })()
+  const jugados = group.matches.filter((m) => m.status === "FINISHED").length;
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
+      >
+        <span className="text-base shrink-0">🏆</span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-sm font-bold text-white leading-snug">
+            {group.name}
+          </span>
+          <span className="block text-[10px] text-slate-500 mt-0.5">
+            {group.rounds.length} rueda{group.rounds.length !== 1 ? "s" : ""} ·{" "}
+            {jugados}/{group.matches.length} jugados
+          </span>
+        </span>
+        {group.isFinished && (
+          <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-300">
+            Finalizado
+          </span>
+        )}
+        <span className="text-slate-500 shrink-0">
+          <Chevron open={open} />
+        </span>
+      </button>
+
+      {open && (
+        <div className="px-3 pb-3 space-y-2">
+          {group.rounds.map((r) => (
+            <RoundSection
+              key={r.round ?? "sin-rueda"}
+              group={r}
+              isAdmin={isAdmin}
+              onEditMatch={onEditMatch}
+              onCompleteOnce={onCompleteOnce}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
+// ── Nivel 2: Rueda ────────────────────────────────────────
+const ROUND_BADGE: Record<RoundState, { label: string; className: string } | null> = {
+  live: {
+    label: "En juego",
+    className: "border-emerald-500/25 bg-emerald-500/10 text-emerald-300",
+  },
+  current: {
+    label: "En curso",
+    className: "border-sky-500/25 bg-sky-500/10 text-sky-300",
+  },
+  next: {
+    label: "Próxima rueda",
+    className: "border-violet-500/25 bg-violet-500/10 text-violet-300",
+  },
+  upcoming: {
+    label: "Por comenzar",
+    className: "border-white/10 bg-white/5 text-slate-400",
+  },
+  finished: null,
+};
+
+function RoundSection({
+  group,
+  isAdmin,
+  onEditMatch,
+  onCompleteOnce,
+}: {
+  group: RoundGroup;
+  isAdmin: boolean;
+  onEditMatch: (m: MatchData) => void;
+  onCompleteOnce: (m: MatchData) => void;
+}) {
+  // Solo la rueda en curso (o con partido en vivo) arranca desplegada.
+  const [open, setOpen] = useState(group.state === "live" || group.state === "current");
+
+  const badge = ROUND_BADGE[group.state];
+  const jugados = group.matches.filter((m) => m.status === "FINISHED").length;
+
+  return (
+    <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-white/[0.03] transition-colors"
+      >
+        <span className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-bold uppercase tracking-widest text-slate-300">
+            {roundLabel(group.round)}
+          </span>
+          {badge && (
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge.className}`}
+            >
+              {badge.label}
+            </span>
+          )}
+        </span>
+        <span className="text-[10px] text-slate-600 shrink-0">
+          {jugados}/{group.matches.length}
+        </span>
+        <span className="text-slate-500 shrink-0">
+          <Chevron open={open} />
+        </span>
+      </button>
+
+      {open && (
+        <div className="px-2 pb-2 space-y-2">
+          {group.matches.map((m) => (
+            <MatchCard
+              key={m.id}
+              match={m}
+              isAdmin={isAdmin}
+              onEdit={() => onEditMatch(m)}
+              onCompleteOnce={() => onCompleteOnce(m)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Nivel 3: Partido (siempre arranca contraído) ──────────
 function MatchCard({
   match,
   isAdmin,
@@ -717,140 +961,161 @@ function MatchCard({
   onEdit: () => void;
   onCompleteOnce?: () => void;
 }) {
-  const isLive     = match.status === "IN_PROGRESS";
+  const [open, setOpen] = useState(false);
+
+  const isLive = match.status === "IN_PROGRESS";
   const isFinished = match.status === "FINISHED";
+  const hasScore = match.homeScore != null && match.awayScore != null;
 
   const statusBadge = {
     IN_PROGRESS: "bg-emerald-500/10 border-emerald-500/20 text-emerald-300",
-    PENDING:     "bg-white/5        border-white/10        text-slate-400",
-    FINISHED:    "bg-blue-500/10    border-blue-500/20     text-blue-300",
-    POSTPONED:   "bg-amber-500/10   border-amber-500/20    text-amber-300",
+    PENDING: "bg-white/5        border-white/10        text-slate-400",
+    FINISHED: "bg-blue-500/10    border-blue-500/20     text-blue-300",
+    POSTPONED: "bg-amber-500/10   border-amber-500/20    text-amber-300",
   }[match.status];
 
   const statusLabel = {
     IN_PROGRESS: "En juego",
-    PENDING:     "Pendiente",
-    FINISHED:    "Finalizado",
-    POSTPONED:   "Reagendado",
+    PENDING: "Pendiente",
+    FINISHED: "Finalizado",
+    POSTPONED: "Reagendado",
   }[match.status];
 
   const resultBadge = match.result
     ? {
-        WIN:  { label: "Victoria", color: "text-emerald-400" },
-        LOSS: { label: "Derrota",  color: "text-rose-400"    },
-        DRAW: { label: "Empate",   color: "text-amber-400"   },
+        WIN: { label: "Victoria", color: "text-emerald-400" },
+        LOSS: { label: "Derrota", color: "text-rose-400" },
+        DRAW: { label: "Empate", color: "text-amber-400" },
       }[match.result]
     : null;
 
   return (
     <div
-      className={`rounded-2xl border overflow-hidden transition-all duration-150 ${
+      className={`rounded-xl border overflow-hidden transition-all duration-150 ${
         isLive
           ? "border-emerald-500/20 bg-emerald-500/[0.04]"
           : "border-white/10 bg-white/[0.04]"
       }`}
     >
       {isLive && (
-        <div className="bg-gradient-to-r from-emerald-600/80 to-emerald-500/80 backdrop-blur px-4 py-2 flex items-center gap-2">
+        <div className="bg-gradient-to-r from-emerald-600/80 to-emerald-500/80 backdrop-blur px-3 py-1.5 flex items-center gap-2">
           <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-          <span className="text-white text-xs font-bold uppercase tracking-widest">
+          <span className="text-white text-[10px] font-bold uppercase tracking-widest">
             Partido en curso
           </span>
         </div>
       )}
 
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 flex-wrap mb-1.5">
-              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${statusBadge}`}>
+      {/* ── Cabecera siempre visible: rival, etiqueta y marcador ── */}
+      <div className="flex items-center gap-2 p-3">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex-1 min-w-0 flex items-center gap-3 text-left"
+        >
+          <span className="flex-1 min-w-0">
+            <span className="flex items-center gap-2 flex-wrap mb-1">
+              <span
+                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusBadge}`}
+              >
                 {statusLabel}
               </span>
               {resultBadge && (
-                <span className={`text-xs font-bold ${resultBadge.color}`}>
+                <span className={`text-[10px] font-bold ${resultBadge.color}`}>
                   {resultBadge.label}
                 </span>
               )}
-            </div>
-            <h3 className="font-bold text-white text-base leading-tight">
+            </span>
+            <span className="block font-bold text-white text-sm leading-tight truncate">
               vs {match.opponent}
-            </h3>
-          </div>
+            </span>
+          </span>
 
-          <div className="flex items-start gap-2 shrink-0">
-            {(isFinished || isLive) && match.homeScore != null && match.awayScore != null && (
-              <div className="text-right">
-                <p className="text-3xl font-semibold text-white leading-none">
-                  {match.homeScore}
-                  <span className="text-white/25 mx-1">-</span>
-                  {match.awayScore}
-                </p>
-              </div>
-            )}
-
-            {/* ✏️ Botón mágico admin */}
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={onEdit}
-                title="Editar partido"
-                className="w-7 h-7 rounded-full bg-white/[0.06] border border-white/10 hover:bg-white/[0.12] hover:border-white/20 flex items-center justify-center text-slate-400 hover:text-white transition-all duration-150 shrink-0"
-              >
-                <PencilIcon />
-              </button>
-            )}
-          </div>
-        </div>
-
-        <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-          {match.fixtureRoundNumber != null && (
-            <span className="font-semibold text-slate-400">
-              Fecha {match.fixtureRoundNumber} ·{" "}
+          {(isFinished || isLive) && hasScore && (
+            <span className="text-2xl font-semibold text-white leading-none shrink-0 tabular-nums">
+              {match.homeScore}
+              <span className="text-white/25 mx-1">-</span>
+              {match.awayScore}
             </span>
           )}
-          {match.status === "POSTPONED" ? (
-            <span className="text-amber-400/80">Nueva fecha a confirmar</span>
-          ) : (
-            formatDate(match.date, { weekday: "long", day: "numeric", month: "long", year: "numeric" })
-          )}
-          {match.venue && (
-            <>
-              <br />
-              <span>📍 {match.venue}</span>
-            </>
-          )}
-        </p>
 
-        {/* Bitácora de incidencias — goles, tarjetas y cambios */}
-        {(isFinished || isLive) && match.events.length > 0 && (
-          <div className="mt-4 border-t border-white/[0.06] pt-4">
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-600 mb-3">
-              📋 Bitácora del partido
-            </p>
-            <BitacoraList events={match.events} opponent={match.opponent} />
-          </div>
-        )}
+          <span className="text-slate-500 shrink-0">
+            <Chevron open={open} />
+          </span>
+        </button>
 
-        {match.once.length > 0 && (
-          <div className="mt-4 border-t border-white/[0.06] pt-4">
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-600 mb-3">
-              {isLive ? "🏟️ Once inicial" : "Once inicial"}
-            </p>
-            <OnceInicialList players={match.once} />
-          </div>
-        )}
-
-        {/* Admin hint: once inicial disponible */}
-        {isAdmin && isLive && match.once.length === 0 && (
+        {/* ✏️ Botón mágico admin — fuera del toggle para no anidar botones */}
+        {isAdmin && (
           <button
             type="button"
-            onClick={onCompleteOnce ?? onEdit}
-            className="mt-3 w-full text-xs text-emerald-400/70 border border-emerald-500/10 hover:border-emerald-500/20 hover:text-emerald-300 rounded-xl py-2 transition-all text-center"
+            onClick={onEdit}
+            title="Editar partido"
+            className="w-7 h-7 rounded-full bg-white/[0.06] border border-white/10 hover:bg-white/[0.12] hover:border-white/20 flex items-center justify-center text-slate-400 hover:text-white transition-all duration-150 shrink-0"
           >
-            ⚽ Completar once inicial →
+            <PencilIcon />
           </button>
         )}
       </div>
+
+      {/* ── Detalle desplegable ── */}
+      {open && (
+        <div className="px-3 pb-3 border-t border-white/[0.06] pt-3">
+          <p className="text-xs text-slate-500 leading-relaxed">
+            {match.fixtureRoundNumber != null && (
+              <span className="font-semibold text-slate-400">
+                Fecha {match.fixtureRoundNumber} ·{" "}
+              </span>
+            )}
+            {match.status === "POSTPONED" ? (
+              <span className="text-amber-400/80">Nueva fecha a confirmar</span>
+            ) : (
+              formatDate(match.date, {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })
+            )}
+            {match.venue && (
+              <>
+                <br />
+                <span>📍 {match.venue}</span>
+              </>
+            )}
+          </p>
+
+          {/* Bitácora de incidencias — goles, tarjetas y cambios */}
+          {(isFinished || isLive) && match.events.length > 0 && (
+            <div className="mt-4 border-t border-white/[0.06] pt-4">
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-600 mb-3">
+                📋 Bitácora del partido
+              </p>
+              <BitacoraList events={match.events} opponent={match.opponent} />
+            </div>
+          )}
+
+          {match.once.length > 0 && (
+            <div className="mt-4 border-t border-white/[0.06] pt-4">
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-600 mb-3">
+                {isLive ? "🏟️ Once inicial" : "Once inicial"}
+              </p>
+              <OnceInicialList players={match.once} />
+            </div>
+          )}
+
+          {/* Admin hint: once inicial disponible */}
+          {isAdmin && isLive && match.once.length === 0 && (
+            <button
+              type="button"
+              onClick={onCompleteOnce ?? onEdit}
+              className="mt-3 w-full text-xs text-emerald-400/70 border border-emerald-500/10 hover:border-emerald-500/20 hover:text-emerald-300 rounded-xl py-2 transition-all text-center"
+            >
+              ⚽ Completar once inicial →
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1098,7 +1363,7 @@ function PlayerCard({
           </span>
         )}
 
-        <p className={`mt-3 text-xs font-semibold opacity-0 group-hover/card:opacity-100 transition-opacity ${posStyle.accent}`}>
+        <p className={`mt-3 text-xs font-semibold opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/card:opacity-100 transition-opacity ${posStyle.accent}`}>
           Ver perfil →
         </p>
       </Link>
@@ -1112,7 +1377,7 @@ function PlayerCard({
             onEdit();
           }}
           title="Editar jugadora"
-          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#0a101e]/90 border border-white/10 hover:bg-sky-500/20 hover:border-sky-500/30 flex items-center justify-center text-slate-400 hover:text-sky-300 transition-all duration-150 opacity-0 group-hover/card:opacity-100 z-10"
+          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#0a101e]/90 border border-white/10 hover:bg-sky-500/20 hover:border-sky-500/30 flex items-center justify-center text-slate-400 hover:text-sky-300 transition-all duration-150 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/card:opacity-100 z-10"
         >
           <PencilIcon />
         </button>

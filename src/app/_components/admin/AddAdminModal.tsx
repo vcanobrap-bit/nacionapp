@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { createAdminAction, type AdminFormState } from "@/lib/actions/jugadoras";
+import ModalPortal from "./ModalPortal";
 
 // ── Inner form ──────────────────────────────────────────────────────────────
 function AddAdminForm({ onSuccess }: { onSuccess: () => void }) {
@@ -111,6 +112,7 @@ export default function AddAdminModal() {
       </button>
 
       {open && (
+        <ModalPortal>
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
@@ -155,6 +157,7 @@ export default function AddAdminModal() {
             </button>
           </div>
         </div>
+        </ModalPortal>
       )}
     </>
   );

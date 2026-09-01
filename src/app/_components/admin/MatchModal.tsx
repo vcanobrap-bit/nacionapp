@@ -81,8 +81,11 @@ function PartidoForm({
       )}
 
       {/* ── Datos básicos ───────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="col-span-2 sm:col-span-1">
+      {/* Una columna en móvil: el input datetime-local de iOS tiene un ancho
+          mínimo propio y en dos columnas se desborda sobre el campo vecino.
+          `min-w-0` deja que los hijos del grid se encojan en pantallas grandes. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="min-w-0">
           <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
             Rival <span className="text-red-400">*</span>
           </label>
@@ -95,7 +98,7 @@ function PartidoForm({
             className={FIELD}
           />
         </div>
-        <div>
+        <div className="min-w-0">
           <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
             Fecha y hora <span className="text-red-400">*</span>
           </label>
@@ -107,7 +110,7 @@ function PartidoForm({
             className={FIELD + " [color-scheme:dark]"}
           />
         </div>
-        <div>
+        <div className="min-w-0">
           <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
             Estadio / Cancha
           </label>
@@ -119,7 +122,7 @@ function PartidoForm({
             className={FIELD}
           />
         </div>
-        <div>
+        <div className="min-w-0">
           <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
             Estado
           </label>
