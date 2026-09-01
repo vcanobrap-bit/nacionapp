@@ -225,6 +225,17 @@ tarjeta principal con los puntos de la rueda actual, tarjeta chica con el total
 del campeonato, y el rendimiento (PJ/V/E/D, GF/GC) de ese campeonato.
 Los puntos de torneos distintos jamás se agregan entre sí.
 
+## La pestaña activa vive en la URL
+
+`/` → Posiciones · `/?tab=partidos` · `/?tab=plantel`. `page.tsx` lee `?tab=`
+(validado con `parseTab`) y lo pasa como `initialTab`; el servidor renderiza la
+pestaña correcta de entrada. En el cliente, **cambiar de pestaña va siempre por
+`changeTab()`**, que actualiza el estado y la URL con `history.replaceState`
+(sin round-trip; Next.js lo integra con su router). Así un refresh —incluido el
+sondeo del partido en vivo— no te devuelve a Posiciones, y cualquier enlace de
+vuelta puede apuntar a una pestaña: la ficha de jugadora vuelve a `/?tab=plantel`,
+no a `/`.
+
 ## Rutas
 
 | Ruta | Descripción |

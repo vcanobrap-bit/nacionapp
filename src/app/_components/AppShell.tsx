@@ -12,10 +12,7 @@ import TournamentModal from "./admin/TournamentModal";
 import LiveMatchCard, { groupEventsByPhase } from "./LiveMatchCard";
 import LiveRefresher from "./LiveRefresher";
 import { PHASE_LABEL } from "@/lib/clock";
-import type { MatchData, PlayerData, StatsData, OncePlayer, TournamentData, LiveMatchData, MatchEventData } from "../page";
-
-// ── Types ─────────────────────────────────────────────────
-type Tab = "posiciones" | "partidos" | "plantel";
+import type { MatchData, PlayerData, StatsData, OncePlayer, TournamentData, LiveMatchData, MatchEventData, Tab } from "../page";
 
 // ── Helpers ───────────────────────────────────────────────
 function calcAge(iso: string): number {
@@ -102,8 +99,10 @@ function PencilIcon() {
 
 // ── Main component ────────────────────────────────────────
 export default function AppShell({
-  serverNow, matches, players, tournaments, adminEmail, liveMatch,
+  initialTab, serverNow, matches, players, tournaments, adminEmail, liveMatch,
 }: {
+  /** Pestaña con la que se carga, leída de `?tab=` en el servidor. */
+  initialTab: Tab;
   /** Hora del servidor al renderizar; corrige el desfase del reloj del dispositivo. */
   serverNow: number;
   matches: MatchData[];
@@ -114,7 +113,18 @@ export default function AppShell({
 }) {
   const isAdmin = adminEmail !== null;
 
-  const [tab, setTab] = useState<Tab>("posiciones");
+  const [tab, setTab] = useState<Tab>(initialTab);
+
+  /**
+   * Cambia de pestaña y lo refleja en la URL sin round-trip al servidor
+   * (Next.js integra `history.replaceState` con su router). `/` queda limpio
+   * para la pestaña por defecto. Así un refresh —incluido el sondeo del
+   * partido en vivo— y un enlace de vuelta caen en la pestaña correcta.
+   */
+  const changeTab = useCallback((t: Tab) => {
+    setTab(t);
+    window.history.replaceState(null, "", t === "posiciones" ? "/" : `/?tab=${t}`);
+  }, []);
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null);
 
   // ── Modal state ──────────────────────────────────────────
@@ -162,9 +172,9 @@ export default function AppShell({
    */
   const goToLiveCard = useCallback(() => {
     setMatchModalOpen(false);
-    setTab("posiciones");
+    changeTab("posiciones");
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
+  }, [changeTab]);
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "posiciones", label: "Posiciones" },
@@ -266,7 +276,7 @@ export default function AppShell({
             {tabs.map((t) => (
               <button
                 key={t.id}
-                onClick={() => setTab(t.id)}
+                onClick={() => changeTab(t.id)}
                 className={`flex-1 text-xs font-semibold py-2 rounded-full transition-all duration-150 ${
                   tab === t.id
                     ? "bg-white text-[#050B14] shadow-sm"

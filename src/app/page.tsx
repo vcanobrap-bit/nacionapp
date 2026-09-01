@@ -108,8 +108,25 @@ export interface StatsData {
   inProgressCount: number;
 }
 
+// ── Pestaña activa en la URL ─────────────────────────────────
+// La pestaña vive en `?tab=`: así el servidor renderiza la correcta de entrada
+// (sin parpadeo), un refresh no te devuelve a Posiciones, y un enlace puede
+// apuntar a una pestaña concreta — p. ej. "‹ Plantel" desde la ficha de jugadora.
+export type Tab = "posiciones" | "partidos" | "plantel";
+const TABS: readonly Tab[] = ["posiciones", "partidos", "plantel"];
+function parseTab(raw: string | undefined): Tab {
+  return (TABS as readonly string[]).includes(raw ?? "") ? (raw as Tab) : "posiciones";
+}
+
 // ── Page (Server Component) ───────────────────────────────────
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const { tab } = await searchParams;
+  const initialTab = parseTab(tab);
+
   const [rawMatches, rawPlayers, rawTournaments] = await Promise.all([
     prisma.match.findMany({
       orderBy: { date: "asc" },
@@ -324,6 +341,7 @@ export default async function HomePage() {
 
   return (
     <AppShell
+      initialTab={initialTab}
       // Server Component: se renderiza una vez por request, así que leer el
       // reloj acá es estable. El cliente usa este valor para corregir el
       // desfase de la hora de su dispositivo al mostrar el reloj del partido.
