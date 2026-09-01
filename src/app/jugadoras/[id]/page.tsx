@@ -82,7 +82,7 @@ export default async function PlayerProfilePage({ params }: Props) {
       <header className="sticky top-0 z-20 bg-[#020617]/80 backdrop-blur-xl border-b border-white/[0.06]">
         <div className="max-w-xl mx-auto px-4 h-14 flex items-center justify-between">
           <Link
-            href="/"
+            href="/?tab=plantel"
             className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
           >
             <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
