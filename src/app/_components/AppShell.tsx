@@ -10,6 +10,7 @@ import PlayerModal from "./admin/PlayerModal";
 import AddAdminModal from "./admin/AddAdminModal";
 import TournamentModal from "./admin/TournamentModal";
 import LiveMatchCard, { groupEventsByPhase } from "./LiveMatchCard";
+import LiveRefresher from "./LiveRefresher";
 import { PHASE_LABEL } from "@/lib/clock";
 import type { MatchData, PlayerData, StatsData, OncePlayer, TournamentData, LiveMatchData, MatchEventData } from "../page";
 
@@ -196,6 +197,9 @@ export default function AppShell({
 
   return (
     <div className="flex flex-col min-h-screen bg-[#020617] text-white relative">
+      {/* Sondeo de datos frescos, solo mientras hay partido en vivo */}
+      <LiveRefresher enabled={liveMatch !== null} />
+
       {/* WebGL dot-matrix background */}
       <WebGLBackground />
 

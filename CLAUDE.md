@@ -150,6 +150,27 @@ Para que la usuaria no se pierda entre pantallas, el modal encadena los pasos:
 objeto: así, tras un `router.refresh()`, el modal ve el estado y los titulares
 frescos en vez de la copia capturada al abrirlo.
 
+### Espectadores: sondeo mientras hay partido en vivo
+
+La página se renderiza en el servidor una vez. El admin ve sus cambios porque
+cada acción llama a `router.refresh()` en su cliente; nadie más se entera.
+`LiveRefresher` (en `AppShell`) llama a `router.refresh()` cada 6 s **solo
+mientras `liveMatch !== null`**, pausado con la pestaña en segundo plano y
+con refresh inmediato al volver. Cuando el partido termina, el siguiente
+refresh trae `liveMatch = null` y el sondeo se apaga solo.
+
+`router.refresh()` conserva el estado del cliente, así que un refresh en
+medio de un formulario o con un desplegable abierto no se nota. El reloj
+**no** depende del sondeo: recibe `periodStartedAt` una vez y corre local.
+
+Si el sondeo llega a pesar (muchos espectadores), dos escalones:
+1. Endpoint mínimo `¿cambió algo?` y refrescar solo si sí. Mismo refresh,
+   disparador barato.
+2. Supabase Realtime sobre `matches` y `match_events` disparando el mismo
+   `router.refresh()`. Requiere `@supabase/supabase-js` en el cliente, la
+   clave anónima como `NEXT_PUBLIC_*`, activar Realtime en esas tablas y una
+   política RLS de lectura anónima — cada uno es un paso manual en Supabase.
+
 ### Fútbol amateur: sin "+3" de adición
 
 El árbitro no anuncia cuánta adición se juega y no hay tablero. La app **no
