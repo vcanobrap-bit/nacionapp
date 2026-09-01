@@ -31,8 +31,7 @@ export async function createTournamentAction(
 
   await prisma.tournament.create({ data: { name, year } });
 
-  revalidatePath("/admin/torneos");
-  revalidatePath("/admin/partidos/nuevo");
+  revalidatePath("/");
   return { success: `Campeonato "${name} ${year}" creado.` };
 }
 
@@ -50,7 +49,7 @@ export async function toggleTournamentActiveAction(
     data: { isActive: !t.isActive },
   });
 
-  revalidatePath("/admin/torneos");
+  revalidatePath("/");
   return {};
 }
 
@@ -63,8 +62,6 @@ export async function deleteTournamentAction(
 
   await prisma.tournament.delete({ where: { id: tournamentId } });
 
-  revalidatePath("/admin/torneos");
-  revalidatePath("/admin/partidos");
   revalidatePath("/");
   return {};
 }

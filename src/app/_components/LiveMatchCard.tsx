@@ -9,7 +9,7 @@ import {
   finishMatchAction,
   deleteEventAction,
   addSubstitutionAction,
-} from "@/app/admin/partidos/actions";
+} from "@/lib/actions/partidos";
 import type { LiveMatchData, MatchEventData } from "../page";
 
 // ── Icono de evento ───────────────────────────────────────────────────────

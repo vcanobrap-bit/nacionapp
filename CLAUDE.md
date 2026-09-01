@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | Tecnología | Versión | Notas críticas |
 |---|---|---|
-| Next.js | 16.2.6 | App Router, `proxy.ts` (no `middleware.ts`) |
+| Next.js | 16.2.6 | App Router. Si se agrega middleware, el archivo es `proxy.ts` (no `middleware.ts`) |
 | React | 19.2.4 | `useActionState` en lugar de `useFormState` |
 | Tailwind CSS | v4 | Config vía PostCSS, sin `tailwind.config.js` |
 | Prisma | 7.8.x | **Breaking**: URL en `prisma.config.ts`, requiere Driver Adapter |
@@ -21,11 +21,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | bcryptjs | 3.x | Para hashear passwords (12 salt rounds) |
 | TypeScript | 5.x | `strict: true` |
 
-## Arquitectura de acceso
+## Arquitectura de acceso — UNA sola interfaz
 
-- **Rutas públicas** (`/`, `/partidos`, `/posiciones`): sin autenticación, sin overhead de sesión.
-- **`/admin/*`**: protegidas por `src/proxy.ts` — redirige a `/login` sin sesión activa.
+**No hay panel `/admin`.** La administración vive *sobre la vista pública*: la admin
+navega la misma app que las hinchas y edita en el lugar mediante modales y botones
+que solo aparecen con sesión ADMIN. Al iniciar sesión se vuelve a `/`.
+
+> **Decisión de arquitectura (no revertir sin motivo).** Antes existían dos UIs de
+> admin en paralelo: las rutas `/admin/*` y los modales sobre la vista pública. Cada
+> cambio había que hacerlo dos veces y se desincronizaban. Se eliminó `/admin/*` y los
+> modales quedaron como interfaz oficial. **Al agregar funcionalidad de admin, va en un
+> modal/control inline sobre la vista pública — nunca en una ruta nueva.**
+
+- **Todas las rutas son públicas**; no hay middleware de rutas (`src/proxy.ts` fue eliminado).
+- La autorización vive **exclusivamente en los Server Actions**: cada mutación empieza
+  con `requireAdmin()` (verifica `auth()` y `role === "ADMIN"` y lanza si no).
+  Al agregar un Server Action nuevo, **empezarlo siempre con `requireAdmin()`**.
+- Los datos privados (`status`, `adminComments`) se filtran en `src/app/page.tsx`:
+  solo se serializan al cliente si `isAdmin`.
 - Solo usuarios con `role: "ADMIN"` pueden autenticarse. Los `PLAYER` son rechazados en `authorize()`.
+
+### Componentes de administración
+
+| Componente | Propósito |
+|---|---|
+| `_components/admin/MatchModal.tsx` | Crear/editar partido + armar once inicial |
+| `_components/admin/PlayerModal.tsx` | Crear/editar jugadora (datos públicos y privados) |
+| `_components/admin/TournamentModal.tsx` | Crear campeonatos, activar/desactivar, eliminar |
+| `_components/admin/AddAdminModal.tsx` | Alta de otro usuario administrador |
+| `_components/LiveMatchCard.tsx` | Consola de partido en vivo: goles, tarjetas, cambios, finalizar |
 
 ## Base de datos — Supabase PostgreSQL
 
@@ -42,26 +66,40 @@ Profile      → firstName, lastName, avatarUrl, birthdate, joiningYear, idealPo
                number, bio [PÚBLICO]
                status (AVAILABLE | INJURED), adminComments [PRIVADO/ADMIN]
 Tournament   → name, year, isActive — campeonatos; FK SetNull en Match al borrar
-Match        → date, opponent, venue, status (PENDING | IN_PROGRESS | FINISHED),
+Match        → date, opponent, venue,
+               status (PENDING | IN_PROGRESS | FINISHED | POSTPONED),
                result (WIN | LOSS | DRAW), homeScore, awayScore, notes,
                tournamentId?, round?, fixtureRoundNumber?
-MatchEvent   → matchId, type (GOAL | AMARILLA | ROJA), isOwn (bool),
-               playerId?, minute? — incidencias del partido en vivo
+MatchEvent   → matchId, type (GOAL | AMARILLA | ROJA | CAMBIO), isOwn (bool),
+               playerId?  → autora del gol/tarjeta, o la que SALE en un CAMBIO
+               player2Id? → solo CAMBIO: la que ENTRA
+               minute?
 PlayerMatch  → userId, matchId, isTitular (bool) — convocatoria y titularidad
 ```
 
-## Rutas del panel admin
+### Semántica de `MatchStatus`
 
-| Ruta | Propósito |
+- `PENDING` — por jugar, con fecha confirmada.
+- `IN_PROGRESS` — en curso; habilita la consola en vivo y el armado del once.
+- `FINISHED` — jugado; muestra resultado + bitácora de incidencias.
+- `POSTPONED` ("Reagendado") — **reprogramado sin fecha nueva**. Cuenta como partido
+  pendiente para los puntos ideales, pero se **excluye** del cálculo de "próximo
+  partido" (no tiene fecha confiable). En la UI muestra "Nueva fecha a confirmar".
+
+### Bitácora del partido
+
+Los `MatchEvent` se cargan en vivo desde `LiveMatchCard` y siguen visibles cuando el
+partido pasa a `FINISHED`: `src/app/page.tsx` los serializa en `MatchData.events` y
+`AppShell` los renderiza con `BitacoraList`. Al tocar los eventos, recordar que hay
+**dos** superficies que los muestran: la tarjeta en vivo y la bitácora del partido jugado.
+
+## Rutas
+
+| Ruta | Descripción |
 |---|---|
-| `/admin` | Dashboard con stats |
-| `/admin/jugadoras` | Listado del plantel |
-| `/admin/jugadoras/[id]` | Edición completa + historial |
-| `/admin/partidos` | Listado de partidos |
-| `/admin/partidos/nuevo` | Crear partido |
-| `/admin/partidos/[id]` | Editar partido (estado, resultado, score, torneo) |
-| `/admin/partidos/[id]/once` | Convocatoria + once inicial — solo con `IN_PROGRESS` |
-| `/admin/torneos` | Gestión de campeonatos |
+| `/` | App completa (3 tabs) + controles de admin inline si hay sesión |
+| `/jugadoras/[id]` | Ficha pública de la jugadora |
+| `/login` | Ingreso de administradoras → redirige a `/` |
 
 ## API pública
 
@@ -80,12 +118,16 @@ import { PrismaPg } from "@prisma/adapter-pg";
 
 ## Convenciones del proyecto
 
-- Server Actions en `actions.ts` junto a su ruta; Client Components en `_components/`
+- **Server Actions en `src/lib/actions/{jugadoras,partidos,torneos}.ts`** — agrupados por
+  dominio, fuera de `src/app/` (no están atados a ninguna ruta).
+- Client Components en `_components/`; los de administración en `_components/admin/`.
 - Todos los formularios usan `useActionState` (React 19) — nunca `useState` manual para forms
 - Server Actions protegen sus mutaciones con `requireAdmin()` (llama a `auth()` y verifica `role`)
 - Nombres en español (variables, labels, mensajes de error)
-- Clases Tailwind: tema `slate-950` / `sky-500` para el admin, gradiente `slate-900 → blue-950` para login
-- `revalidatePath` después de toda mutación
+- `revalidatePath("/")` después de toda mutación (y `/api/partidos/en-vivo` si toca el partido en curso)
+- **No resetear estado desde un `useEffect`** (ESLint `react-hooks/set-state-in-effect` lo marca
+  como error). Para que un modal arranque limpio, montar el contenido condicionalmente con una
+  `key` derivada de los props — ver `MatchModal` (wrapper + `MatchModalContent`).
 - Sistema de diseño visual documentado en `DESIGN.md` (glass surfaces, gradientes, radios, motion)
 
 ## Scripts npm
@@ -104,9 +146,19 @@ npm run lint         # ESLint
 
 1. **Prisma 7**: `PrismaClient` siempre necesita `adapter: new PrismaPg({ connectionString })`. Sin el adapter, lanza `PrismaClientInitializationError`.
 2. **Prisma client path**: importar desde `@/generated/prisma`, nunca desde `@prisma/client`.
-3. **Next.js 16**: el archivo de middleware se llama `src/proxy.ts`, no `middleware.ts`.
+3. **Next.js 16**: si se agrega middleware, el archivo se llama `src/proxy.ts`, no `middleware.ts`. Hoy **no hay** middleware: la autorización vive en `requireAdmin()` dentro de cada Server Action.
 4. **Auth.js v5**: los redirects exitosos de `signIn` se lanzan como error (`NEXT_REDIRECT`). Re-propagarlos con `throw error` en el catch.
 5. **Tailwind v4**: no existe `tailwind.config.js`; la configuración va en CSS con `@theme`.
 6. **`db:push --accept-data-loss`**: usar cuando se renombran enums o columnas en dev (datos se re-crean con seed).
 7. **Acciones de partido en vivo** (`addHomeGoalAction`, `addAwayGoalAction`, `addCardAction`, `finishMatchAction`): solo funcionan con `status === IN_PROGRESS`; `finishMatchAction` calcula el resultado automáticamente del marcador.
 8. **Lazy Prisma singleton**: `src/lib/prisma.ts` usa un Proxy para inicialización lazy. Vercel marca `DATABASE_URL` como variable sensible (solo runtime), por lo que el cliente Prisma **no** puede instanciarse durante el build. Nunca mover la inicialización fuera del Proxy o se romperá el build en producción.
+9. **⚠️ Agregar un valor a un enum requiere tocar la base a mano.** El deploy de Vercel corre
+   `prisma generate` + `next build`, pero **nunca** aplica migraciones. Si agregás un valor a un
+   enum del schema, el build pasa y el deploy queda verde, pero **falla en runtime** al guardar
+   ese valor, porque el tipo en Postgres no lo conoce. Hay que correrlo contra producción
+   (SQL Editor de Supabase o `psql`):
+   ```sql
+   ALTER TYPE "MatchStatus" ADD VALUE 'POSTPONED';
+   ```
+   Vale para cualquier enum (`MatchStatus`, `EventType`, `PlayerStatus`, `MatchResult`, `Role`).
+   Verificar con: `SELECT unnest(enum_range(NULL::"MatchStatus"));`

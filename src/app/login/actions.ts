@@ -20,8 +20,9 @@ export async function loginAction(
 ): Promise<LoginState> {
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
-  // El login es exclusivo para admins → destino por defecto es /admin
-  const callbackUrl = (formData.get("callbackUrl") as string) || "/admin";
+  // La administración vive sobre la vista pública (modales inline),
+  // así que tras iniciar sesión volvemos a la home.
+  const callbackUrl = (formData.get("callbackUrl") as string) || "/";
 
   // Validación básica en servidor
   if (!email || !password) {

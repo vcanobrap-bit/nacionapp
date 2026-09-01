@@ -8,6 +8,7 @@ import { logoutAction } from "@/app/auth-actions";
 import MatchModal from "./admin/MatchModal";
 import PlayerModal from "./admin/PlayerModal";
 import AddAdminModal from "./admin/AddAdminModal";
+import TournamentModal from "./admin/TournamentModal";
 import LiveMatchCard from "./LiveMatchCard";
 import type { MatchData, PlayerData, StatsData, OncePlayer, TournamentData, LiveMatchData, MatchEventData } from "../page";
 
@@ -264,18 +265,20 @@ export default function AppShell({
       <main className="relative z-10 flex-1 max-w-xl mx-auto w-full px-4 py-6">
 
         {/* ── Selector de campeonato (Posiciones + Partidos) ── */}
-        {tab !== "plantel" && tournaments.length > 0 && (
+        {tab !== "plantel" && (tournaments.length > 0 || isAdmin) && (
           <div className="flex gap-2 overflow-x-auto pb-2 mb-5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-            <button
-              onClick={() => setSelectedTournamentId(null)}
-              className={`shrink-0 text-xs font-semibold px-3.5 py-1.5 rounded-full border transition-all duration-150 ${
-                selectedTournamentId === null
-                  ? "bg-white text-[#050B14] border-white"
-                  : "border-white/10 text-slate-400 hover:text-white hover:border-white/20"
-              }`}
-            >
-              Todos
-            </button>
+            {tournaments.length > 0 && (
+              <button
+                onClick={() => setSelectedTournamentId(null)}
+                className={`shrink-0 text-xs font-semibold px-3.5 py-1.5 rounded-full border transition-all duration-150 ${
+                  selectedTournamentId === null
+                    ? "bg-white text-[#050B14] border-white"
+                    : "border-white/10 text-slate-400 hover:text-white hover:border-white/20"
+                }`}
+              >
+                Todos
+              </button>
+            )}
             {tournaments.map((t) => (
               <button
                 key={t.id}
@@ -289,6 +292,8 @@ export default function AppShell({
                 {t.name} {t.year}
               </button>
             ))}
+            {/* 🏆 Gestión de campeonatos — solo admin */}
+            {isAdmin && <TournamentModal tournaments={tournaments} />}
           </div>
         )}
 

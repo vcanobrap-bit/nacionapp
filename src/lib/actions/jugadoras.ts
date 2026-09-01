@@ -52,7 +52,6 @@ export async function updatePlayerAction(
     },
   });
 
-  revalidatePath("/admin/jugadoras");
   revalidatePath("/");
   return { success: "Perfil actualizado correctamente." };
 }
@@ -102,7 +101,6 @@ export async function createPlayerAction(
     },
   });
 
-  revalidatePath("/admin/jugadoras");
   revalidatePath("/");
   return { success: "Jugadora creada correctamente." };
 }
@@ -144,7 +142,6 @@ export async function createAdminAction(
 export async function deletePlayerAction(userId: string): Promise<{ error?: string }> {
   await requireAdmin();
   await prisma.user.delete({ where: { id: userId, role: "PLAYER" } });
-  revalidatePath("/admin/jugadoras");
   revalidatePath("/");
   return {};
 }
